@@ -1,6 +1,6 @@
 # waypoint-plugin-cloudfoundry
 
-Plugin for waypoint that adds support for the cloudfoundry platform.
+Plugin for waypoint that adds support for the Cloud Foundry platform.
 
 ## Usage
 Check out the project in the `example` folder to get an idea of how exactly to use the platform.
