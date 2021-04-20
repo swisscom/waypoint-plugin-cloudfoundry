@@ -1,0 +1,11 @@
+
+syntax = "proto3";
+
+package release;
+
+option go_package = "github.com/swisscom/waypoint-plugin-cloudfoundry/release";
+
+message Release {
+  string Url = 1;
+  // string id = 1;
+}

@@ -1,0 +1,7 @@
+bin
+releases
+*.lock
+*.db
+.waypoint
+/.idea/
+*.secret
