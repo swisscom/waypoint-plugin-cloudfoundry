@@ -21,8 +21,8 @@ require (
 	github.com/cppforlife/go-patch v0.2.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/hashicorp/waypoint v0.3.0
-	github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210405143251-32d519ff58f3
+	github.com/hashicorp/waypoint v0.3.1
+	github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210420153757-b55c787a65ff
 	github.com/lunixbochs/vtclean v1.0.0 // indirect
 	github.com/moby/moby v20.10.5+incompatible // indirect
 	github.com/moby/term v0.0.0-20201216013528-df9cb8a40635 // indirect
