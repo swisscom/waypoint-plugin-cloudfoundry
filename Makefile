@@ -14,8 +14,8 @@ protos:
 	@echo ""
 	@echo "Build Protos"
 
-	protoc -I . --go_out=plugins=grpc:. --go_opt=paths=source_relative ./platform/output.proto
-	protoc -I . --go_out=plugins=grpc:. --go_opt=paths=source_relative ./release/output.proto
+	protoc -I . --go-grpc_out=. --go_out=. --go-grpc_opt=paths=source_relative --go_opt=paths=source_relative ./platform/output.proto
+	protoc -I . --go-grpc_out=. --go_out=. --go-grpc_opt=paths=source_relative --go_opt=paths=source_relative ./release/output.proto
 
 # Builds the plugin on your local machine
 build:
@@ -35,7 +35,11 @@ install:
 	@echo ""
 	@echo "Installing Plugin"
 
-	cp ./bin/${_ARCH}_amd64/waypoint-plugin-${PLUGIN_NAME}* ${HOME}/.config/waypoint/plugins/   
+	@if [ "${_ARCH}" = "darwin" ]; then\
+		cp ./bin/${_ARCH}_amd64/waypoint-plugin-${PLUGIN_NAME}* ~/Library/Preferences/waypoint/plugins/;\
+	else\
+		cp ./bin/${_ARCH}_amd64/waypoint-plugin-${PLUGIN_NAME}* ${HOME}/.config/waypoint/plugins/;\
+	fi
 
 # Zip the built plugin binaries
 zip:
