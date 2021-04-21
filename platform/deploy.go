@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"code.cloudfoundry.org/cli/types"
 	"context"
 	"fmt"
 	"time"
@@ -19,10 +20,11 @@ type PlatformConfig struct {
 }
 
 type Config struct {
-	Organisation      string `hcl:"organisation"`
-	Space             string `hcl:"space"`
-	DockerEncodedAuth string `hcl:"docker_encoded_auth,optional"`
-	Domain            string `hcl:"domain"`
+	Organisation      string             `hcl:"organisation"`
+	Space             string             `hcl:"space"`
+	DockerEncodedAuth string             `hcl:"docker_encoded_auth,optional"`
+	Domain            string             `hcl:"domain"`
+	Env               *map[string]string `hcl:"env"`
 }
 
 type Platform struct {
@@ -146,7 +148,7 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 		// Remove the app
 		step = sg.Add(fmt.Sprintf("Deleting existing app %v (will be recreated)", deployment.Name))
 
-		client.DeleteApplication(app.GUID)
+		_, _, err = client.DeleteApplication(app.GUID)
 		if err != nil {
 			step.Abort()
 			return nil, fmt.Errorf("failed to delete app: %v", err)
@@ -220,6 +222,23 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 		step.Update(fmt.Sprintf("Creating a new build for the created package of image %v [%v]", cfPackage.DockerImage, cfBuild.State))
 	}
 	step.Done()
+
+	if b.config.Env != nil {
+		step = sg.Add("Assigning environment variables")
+		envVars := ccv3.EnvironmentVariables{}
+		for k, v := range *b.config.Env {
+			filteredString := types.NewFilteredString(v)
+			if filteredString != nil {
+				envVars[k] = *filteredString
+			}
+		}
+		_, _, err = client.UpdateApplicationEnvironmentVariables(app.GUID, envVars)
+		if err != nil {
+			step.Abort()
+			return nil, fmt.Errorf("unable to set environment variables: %v", err)
+		}
+		step.Done()
+	}
 
 	// Create deployment
 	step = sg.Add("Creating a new deployment")
