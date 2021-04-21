@@ -21,12 +21,12 @@ type PlatformConfig struct {
 }
 
 type Config struct {
-	Organisation      string             `hcl:"organisation"`
-	Space             string             `hcl:"space"`
-	DockerEncodedAuth string             `hcl:"docker_encoded_auth,optional"`
-	Domain            string             `hcl:"domain"`
-	Env               *map[string]string `hcl:"env"`
-	EnvFromFile       *string            `hcl:"envFromFile"`
+	Organisation      string            `hcl:"organisation"`
+	Space             string            `hcl:"space"`
+	DockerEncodedAuth string            `hcl:"docker_encoded_auth,optional"`
+	Domain            string            `hcl:"domain"`
+	Env               map[string]string `hcl:"env,optional"`
+	EnvFromFile       string            `hcl:"envFromFile,optional"`
 }
 
 type Platform struct {
@@ -225,20 +225,20 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 	}
 	step.Done()
 
-	if b.config.Env != nil || b.config.EnvFromFile != nil {
+	if len(b.config.Env) != 0 || b.config.EnvFromFile != "" {
 		step = sg.Add("Assigning environment variables")
 		envVars := ccv3.EnvironmentVariables{}
 
 		// Precedence: envFromFile, env
-		if b.config.EnvFromFile != nil {
-			envContent := utils.ParseEnv(*b.config.EnvFromFile)
+		if b.config.EnvFromFile != "" {
+			envContent := utils.ParseEnv(b.config.EnvFromFile)
 			for k, v := range envContent {
 				addFilteredEnvVar(envVars, k, v)
 			}
 		}
 
-		if b.config.Env != nil {
-			for k, v := range *b.config.Env {
+		if len(b.config.Env) != 0 {
+			for k, v := range b.config.Env {
 				addFilteredEnvVar(envVars, k, v)
 			}
 		}
