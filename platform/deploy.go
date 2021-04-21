@@ -4,7 +4,9 @@ import (
 	"code.cloudfoundry.org/cli/types"
 	"context"
 	"fmt"
+	"github.com/hashicorp/go-hclog"
 	"github.com/swisscom/waypoint-plugin-cloudfoundry/utils"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"time"
 
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
@@ -20,11 +22,18 @@ type PlatformConfig struct {
 	EncodedAuth string `hcl:"encoded_auth"`
 }
 
+type QuotaConfig struct {
+	Memory    string `hcl:"memory,optional"`
+	Disk      string `hcl:"disk,optional"`
+	Instances uint64 `hcl:"instances,optional"`
+}
+
 type Config struct {
 	Organisation      string            `hcl:"organisation"`
 	Space             string            `hcl:"space"`
 	DockerEncodedAuth string            `hcl:"docker_encoded_auth,optional"`
 	Domain            string            `hcl:"domain"`
+	Quota             *QuotaConfig      `hcl:"quota,block"`
 	Env               map[string]string `hcl:"env,optional"`
 	EnvFromFile       string            `hcl:"envFromFile,optional"`
 }
@@ -86,7 +95,7 @@ func (p *Platform) DeployFunc() interface{} {
 // as an input parameter.
 // If an error is returned, Waypoint stops the execution flow and
 // returns an error to the user.
-func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image, job *component.JobInfo, source *component.Source, deploymentConfig *component.DeploymentConfig) (*Deployment, error) {
+func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI, img *docker.Image, job *component.JobInfo, source *component.Source, deploymentConfig *component.DeploymentConfig) (*Deployment, error) {
 	// Create result
 	var deployment Deployment
 	id, err := component.Id()
@@ -95,11 +104,41 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 	}
 	deployment.Id = id
 
+	sg := ui.StepGroup()
+
+	// Parse quantities
+	step := sg.Add("Validating parameters")
+	var diskMB, memoryMB, instances uint64
+
+	if b.config.Quota != nil {
+		log.Debug("quota is not nil")
+		if b.config.Quota.Instances > 0 {
+			instances = b.config.Quota.Instances
+		}
+		if b.config.Quota.Memory != "" {
+			log.Debug("quota memory", "quota_memory", b.config.Quota.Memory)
+			memoryMB, err = parseQuantity(b.config.Quota.Memory)
+			if err != nil {
+				step.Abort()
+				return nil, fmt.Errorf("unable to parse memory: %v", err)
+			}
+			log.Debug("quota parsed", "quota_parsed", memoryMB)
+		}
+		if b.config.Quota.Disk != "" {
+			log.Debug("quota disk", "quota_disk", b.config.Quota.Disk)
+			diskMB, err = parseQuantity(b.config.Quota.Disk)
+			if err != nil {
+				return nil, fmt.Errorf("unable to parse disk: %v", err)
+			}
+			log.Debug("quota parsed disk", "quota_parsed", diskMB)
+		}
+	}
+	step.Done()
+
 	appName := source.App
 	deployment.Name = fmt.Sprintf("%v-%v", appName, deployment.Id)
 
-	sg := ui.StepGroup()
-	step := sg.Add("Connecting to Cloud Foundry")
+	step = sg.Add("Connecting to Cloud Foundry")
 
 	client, err := GetEnvClient()
 	if err != nil {
@@ -161,7 +200,6 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 
 	// Create app
 	step = sg.Add(fmt.Sprintf("Creating app %v", deployment.Name))
-
 	appCreateRequest := resources.Application{
 		Name:          deployment.Name,
 		SpaceGUID:     space.GUID,
@@ -176,6 +214,50 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 	}
 	step.Done()
 	deployment.AppGUID = app.GUID
+
+	if memoryMB != 0 || diskMB != 0 || instances > 1 {
+		step = sg.Add("Configuring quota...")
+		processes, _, err := client.GetApplicationProcesses(app.GUID)
+		if err != nil {
+			step.Abort()
+			return nil, fmt.Errorf("failed to get application processes: %v", err)
+		}
+
+		if len(processes) == 0 {
+			step.Abort()
+			return nil, fmt.Errorf("no processes found")
+		}
+
+		newP := ccv3.Process{
+			Type: "web",
+		}
+		if memoryMB != 0 {
+			newP.MemoryInMB = types.NullUint64{
+				IsSet: true,
+				Value: memoryMB,
+			}
+		}
+		if diskMB != 0 {
+			newP.DiskInMB = types.NullUint64{
+				IsSet: true,
+				Value: diskMB,
+			}
+		}
+
+		if instances != 0 {
+			newP.Instances = types.NullInt {
+				IsSet: true,
+				Value: int(instances),
+			}
+		}
+
+		_, _, err = client.CreateApplicationProcessScale(app.GUID, newP)
+		if err != nil {
+			step.Abort()
+			return nil, fmt.Errorf("unable to scale application: %v", err)
+		}
+		step.Done()
+	}
 
 	// Create package
 	step = sg.Add(fmt.Sprintf("Creating new package for docker image %s:%s in app", img.Image, img.Tag))
@@ -231,16 +313,20 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 
 		// Precedence: envFromFile, env
 		if b.config.EnvFromFile != "" {
+			step := sg.Add("Adding environment variables from file")
 			envContent := utils.ParseEnv(b.config.EnvFromFile)
 			for k, v := range envContent {
 				addFilteredEnvVar(envVars, k, v)
 			}
+			step.Done()
 		}
 
 		if len(b.config.Env) != 0 {
+			step := sg.Add("Adding environment variables from HCL")
 			for k, v := range b.config.Env {
 				addFilteredEnvVar(envVars, k, v)
 			}
+			step.Done()
 		}
 
 		_, _, err = client.UpdateApplicationEnvironmentVariables(app.GUID, envVars)
@@ -298,6 +384,18 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 	deployment.Url = route.URL
 
 	return &deployment, nil
+}
+
+func parseQuantity(entry string) (uint64, error) {
+	quantity, err := resource.ParseQuantity(entry)
+	if err != nil {
+		return 0, err
+	}
+	cv, fastConv := quantity.AsInt64()
+	if fastConv == false {
+		return 0, fmt.Errorf("fast conversion not available")
+	}
+	return uint64(cv) / 1024 / 1024, nil
 }
 
 func addFilteredEnvVar(envVars ccv3.EnvironmentVariables, k string, v string) {
