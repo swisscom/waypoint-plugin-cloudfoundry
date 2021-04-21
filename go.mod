@@ -26,6 +26,7 @@ require (
 	github.com/lunixbochs/vtclean v1.0.0 // indirect
 	github.com/moby/moby v20.10.5+incompatible // indirect
 	github.com/moby/term v0.0.0-20201216013528-df9cb8a40635 // indirect
+	github.com/stretchr/testify v1.7.0
 	github.com/tedsuo/rata v1.0.0 // indirect
 	github.com/vito/go-interact v1.0.0 // indirect
 	google.golang.org/protobuf v1.26.0

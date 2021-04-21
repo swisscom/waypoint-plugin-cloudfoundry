@@ -4,6 +4,7 @@ import (
 	"code.cloudfoundry.org/cli/types"
 	"context"
 	"fmt"
+	"github.com/swisscom/waypoint-plugin-cloudfoundry/utils"
 	"time"
 
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
@@ -20,11 +21,12 @@ type PlatformConfig struct {
 }
 
 type Config struct {
-	Organisation      string             `hcl:"organisation"`
-	Space             string             `hcl:"space"`
-	DockerEncodedAuth string             `hcl:"docker_encoded_auth,optional"`
-	Domain            string             `hcl:"domain"`
-	Env               *map[string]string `hcl:"env"`
+	Organisation      string            `hcl:"organisation"`
+	Space             string            `hcl:"space"`
+	DockerEncodedAuth string            `hcl:"docker_encoded_auth,optional"`
+	Domain            string            `hcl:"domain"`
+	Env               map[string]string `hcl:"env,optional"`
+	EnvFromFile       string            `hcl:"envFromFile,optional"`
 }
 
 type Platform struct {
@@ -223,15 +225,24 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 	}
 	step.Done()
 
-	if b.config.Env != nil {
+	if len(b.config.Env) != 0 || b.config.EnvFromFile != "" {
 		step = sg.Add("Assigning environment variables")
 		envVars := ccv3.EnvironmentVariables{}
-		for k, v := range *b.config.Env {
-			filteredString := types.NewFilteredString(v)
-			if filteredString != nil {
-				envVars[k] = *filteredString
+
+		// Precedence: envFromFile, env
+		if b.config.EnvFromFile != "" {
+			envContent := utils.ParseEnv(b.config.EnvFromFile)
+			for k, v := range envContent {
+				addFilteredEnvVar(envVars, k, v)
 			}
 		}
+
+		if len(b.config.Env) != 0 {
+			for k, v := range b.config.Env {
+				addFilteredEnvVar(envVars, k, v)
+			}
+		}
+
 		_, _, err = client.UpdateApplicationEnvironmentVariables(app.GUID, envVars)
 		if err != nil {
 			step.Abort()
@@ -287,4 +298,11 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 	deployment.Url = route.URL
 
 	return &deployment, nil
+}
+
+func addFilteredEnvVar(envVars ccv3.EnvironmentVariables, k string, v string) {
+	filteredString := types.NewFilteredString(v)
+	if filteredString != nil {
+		envVars[k] = *filteredString
+	}
 }
