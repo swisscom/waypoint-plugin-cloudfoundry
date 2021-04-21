@@ -4,6 +4,7 @@ import (
 	"code.cloudfoundry.org/cli/types"
 	"context"
 	"fmt"
+	"github.com/swisscom/waypoint-plugin-cloudfoundry/utils"
 	"time"
 
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
@@ -25,6 +26,7 @@ type Config struct {
 	DockerEncodedAuth string             `hcl:"docker_encoded_auth,optional"`
 	Domain            string             `hcl:"domain"`
 	Env               *map[string]string `hcl:"env"`
+	EnvFromFile       *string            `hcl:"envFromFile"`
 }
 
 type Platform struct {
@@ -223,15 +225,24 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 	}
 	step.Done()
 
-	if b.config.Env != nil {
+	if b.config.Env != nil || b.config.EnvFromFile != nil {
 		step = sg.Add("Assigning environment variables")
 		envVars := ccv3.EnvironmentVariables{}
-		for k, v := range *b.config.Env {
-			filteredString := types.NewFilteredString(v)
-			if filteredString != nil {
-				envVars[k] = *filteredString
+
+		// Precedence: envFromFile, env
+		if b.config.EnvFromFile != nil {
+			envContent := utils.ParseEnv(*b.config.EnvFromFile)
+			for k, v := range envContent {
+				addFilteredEnvVar(envVars, k, v)
 			}
 		}
+
+		if b.config.Env != nil {
+			for k, v := range *b.config.Env {
+				addFilteredEnvVar(envVars, k, v)
+			}
+		}
+
 		_, _, err = client.UpdateApplicationEnvironmentVariables(app.GUID, envVars)
 		if err != nil {
 			step.Abort()
@@ -287,4 +298,11 @@ func (b *Platform) deploy(ctx context.Context, ui terminal.UI, img *docker.Image
 	deployment.Url = route.URL
 
 	return &deployment, nil
+}
+
+func addFilteredEnvVar(envVars ccv3.EnvironmentVariables, k string, v string) {
+	filteredString := types.NewFilteredString(v)
+	if filteredString != nil {
+		envVars[k] = *filteredString
+	}
 }
