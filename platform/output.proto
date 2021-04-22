@@ -8,8 +8,8 @@ option go_package = "github.com/swisscom/waypoint-plugin-cloudfoundry/platform";
 // You can customise this message to change the fields for
 // the output value from your Deployment
 message Deployment {
-  string id = 1;
-  string Url = 2;
+  string url = 1;
+  string id = 2;
   string OrganisationGUID = 3;
   string SpaceGUID = 4;
   string AppGUID = 5;

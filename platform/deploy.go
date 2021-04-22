@@ -4,6 +4,7 @@ import (
 	"code.cloudfoundry.org/cli/types"
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/hashicorp/go-hclog"
 	"github.com/swisscom/waypoint-plugin-cloudfoundry/utils"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -47,12 +48,12 @@ type UserPasswordCredentials struct {
 	Password string
 }
 
-// Implement Configurable
+// Config implements Configurable
 func (p *Platform) Config() (interface{}, error) {
 	return &p.config, nil
 }
 
-// Implement ConfigurableNotify
+// ConfigSet implements ConfigurableNotify
 func (p *Platform) ConfigSet(config interface{}) error {
 	_, ok := config.(*Config)
 	if !ok {
@@ -63,7 +64,7 @@ func (p *Platform) ConfigSet(config interface{}) error {
 	return nil
 }
 
-// Implement Builder
+// DeployFunc implements Builder
 func (p *Platform) DeployFunc() interface{} {
 	// return a function which will be called by Waypoint
 	return p.deploy
@@ -90,19 +91,16 @@ func (p *Platform) DeployFunc() interface{} {
 // can also be injected.
 //
 // The output parameters for BuildFunc must be a Struct which can
-// be serialzied to Protocol Buffers binary format and an error.
+// be serialized to Protocol Buffers binary format and an error.
 // This Output Value will be made available for other functions
 // as an input parameter.
 // If an error is returned, Waypoint stops the execution flow and
 // returns an error to the user.
-func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI, img *docker.Image, job *component.JobInfo, source *component.Source, deploymentConfig *component.DeploymentConfig) (*Deployment, error) {
+func (p *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI, img *docker.Image, job *component.JobInfo, source *component.Source, deploymentConfig *component.DeploymentConfig) (*Deployment, error) {
 	// Create result
 	var deployment Deployment
-	id, err := component.Id()
-	if err != nil {
-		return nil, err
-	}
-	deployment.Id = id
+	var err error
+	deployment.Id = uuid.New().String()[:8]
 
 	sg := ui.StepGroup()
 
@@ -110,23 +108,23 @@ func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 	step := sg.Add("Validating parameters")
 	var diskMB, memoryMB, instances uint64
 
-	if b.config.Quota != nil {
+	if p.config.Quota != nil {
 		log.Debug("quota is not nil")
-		if b.config.Quota.Instances > 0 {
-			instances = b.config.Quota.Instances
+		if p.config.Quota.Instances > 0 {
+			instances = p.config.Quota.Instances
 		}
-		if b.config.Quota.Memory != "" {
-			log.Debug("quota memory", "quota_memory", b.config.Quota.Memory)
-			memoryMB, err = parseQuantity(b.config.Quota.Memory)
+		if p.config.Quota.Memory != "" {
+			log.Debug("quota memory", "quota_memory", p.config.Quota.Memory)
+			memoryMB, err = parseQuantity(p.config.Quota.Memory)
 			if err != nil {
 				step.Abort()
 				return nil, fmt.Errorf("unable to parse memory: %v", err)
 			}
 			log.Debug("quota parsed", "quota_parsed", memoryMB)
 		}
-		if b.config.Quota.Disk != "" {
-			log.Debug("quota disk", "quota_disk", b.config.Quota.Disk)
-			diskMB, err = parseQuantity(b.config.Quota.Disk)
+		if p.config.Quota.Disk != "" {
+			log.Debug("quota disk", "quota_disk", p.config.Quota.Disk)
+			diskMB, err = parseQuantity(p.config.Quota.Disk)
 			if err != nil {
 				return nil, fmt.Errorf("unable to parse disk: %v", err)
 			}
@@ -136,6 +134,7 @@ func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 	step.Done()
 
 	appName := source.App
+	log.Debug("deployment name generation", "deployment", deployment.Id, "appName", appName)
 	deployment.Name = fmt.Sprintf("%v-%v", appName, deployment.Id)
 
 	step = sg.Add("Connecting to Cloud Foundry")
@@ -149,7 +148,7 @@ func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 	step.Update(fmt.Sprintf("Connecting to Cloud Foundry at %s", client.CloudControllerURL))
 	step.Done()
 
-	org, space, err := selectOrgAndSpace(b, client, sg)
+	org, space, err := selectOrgAndSpace(p, client, sg)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +269,7 @@ func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 		},
 	}
 
-	dockerUsername, dockerPassword, err := getDockerCredentialsFromEncodedAuth(b.config.DockerEncodedAuth)
+	dockerUsername, dockerPassword, err := getDockerCredentialsFromEncodedAuth(p.config.DockerEncodedAuth)
 	// only set docker credentials if they were provided correctly
 	if err == nil {
 		dockerPackage.DockerUsername = dockerUsername
@@ -307,23 +306,23 @@ func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 	}
 	step.Done()
 
-	if len(b.config.Env) != 0 || b.config.EnvFromFile != "" {
+	if len(p.config.Env) != 0 || p.config.EnvFromFile != "" {
 		step = sg.Add("Assigning environment variables")
 		envVars := ccv3.EnvironmentVariables{}
 
 		// Precedence: envFromFile, env
-		if b.config.EnvFromFile != "" {
+		if p.config.EnvFromFile != "" {
 			step := sg.Add("Adding environment variables from file")
-			envContent := utils.ParseEnv(b.config.EnvFromFile)
+			envContent := utils.ParseEnv(p.config.EnvFromFile)
 			for k, v := range envContent {
 				addFilteredEnvVar(envVars, k, v)
 			}
 			step.Done()
 		}
 
-		if len(b.config.Env) != 0 {
+		if len(p.config.Env) != 0 {
 			step := sg.Add("Adding environment variables from HCL")
-			for k, v := range b.config.Env {
+			for k, v := range p.config.Env {
 				addFilteredEnvVar(envVars, k, v)
 			}
 			step.Done()
@@ -347,11 +346,11 @@ func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 	step.Done()
 
 	// Bind route
-	routeUrl := fmt.Sprintf("%v.%v", deployment.Name, b.config.Domain)
+	routeUrl := fmt.Sprintf("%v.%v", deployment.Name, p.config.Domain)
 	step = sg.Add(fmt.Sprintf("Binding route %v to application", routeUrl))
 	domains, _, err := client.GetDomains(ccv3.Query{
 		Key:    ccv3.NameFilter,
-		Values: []string{b.config.Domain},
+		Values: []string{p.config.Domain},
 	})
 	if err != nil || len(domains) == 0 {
 		step.Abort()
@@ -381,9 +380,25 @@ func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 		return nil, fmt.Errorf("failed to map route: %v", err)
 	}
 	step.Done()
+	log.Debug("route_url", "url", route.URL)
 	deployment.Url = route.URL
 
 	return &deployment, nil
+}
+
+func (d *Deployment) URL() string {
+	return d.Url
+}
+
+func (p *Platform) Generation(ctx context.Context,
+	log hclog.Logger,
+) ([]byte, error) {
+	return uuid.New().MarshalBinary()
+}
+
+// GenerationFunc implements component.Generation
+func (p *Platform) GenerationFunc() interface{} {
+	return p.Generation
 }
 
 func parseQuantity(entry string) (uint64, error) {
@@ -404,3 +419,5 @@ func addFilteredEnvVar(envVars ccv3.EnvironmentVariables, k string, v string) {
 		envVars[k] = *filteredString
 	}
 }
+
+var _ component.Deployment = (*Deployment)(nil)

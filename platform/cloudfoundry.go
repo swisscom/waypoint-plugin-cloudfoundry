@@ -56,7 +56,7 @@ func GetEnvClient() (*ccv3.Client, error) {
 		return nil, err
 	}
 
-	ccWrappers := []ccv3.ConnectionWrapper{}
+	var ccWrappers []ccv3.ConnectionWrapper
 	authWrapper := ccWrapper.NewUAAAuthentication(nil, config)
 
 	ccWrappers = append(ccWrappers, authWrapper)

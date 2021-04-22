@@ -3,6 +3,7 @@ package release
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/go-hclog"
 
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
 	"code.cloudfoundry.org/cli/resources"
@@ -52,13 +53,13 @@ func (rm *ReleaseManager) ReleaseFunc() interface{} {
 // can also be injected.
 //
 // The output parameters for ReleaseFunc must be a Struct which can
-// be serialzied to Protocol Buffers binary format and an error.
+// be serialized to Protocol Buffers binary format and an error.
 // This Output Value will be made available for other functions
 // as an input parameter.
 //
 // If an error is returned, Waypoint stops the execution flow and
 // returns an error to the user.
-func (rm *ReleaseManager) release(ctx context.Context, ui terminal.UI, src *component.Source, deployment *platform.Deployment) (*Release, error) {
+func (rm *ReleaseManager) release(ctx context.Context, log hclog.Logger, ui terminal.UI, src *component.Source, deployment *platform.Deployment) (*Release, error) {
 	var release Release
 
 	var hostname string
@@ -175,3 +176,4 @@ func (rm *ReleaseManager) release(ctx context.Context, ui terminal.UI, src *comp
 func (r *Release) URL() string { return r.Url }
 
 var _ component.Release = (*Release)(nil)
+var _ component.ReleaseManager = (*ReleaseManager)(nil)

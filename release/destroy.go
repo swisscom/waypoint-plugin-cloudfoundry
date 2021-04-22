@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/waypoint-plugin-sdk/terminal"
 )
 
-// Implement the Destroyer interface
+// DestroyFunc implements the Destroyer interface
 func (rm *ReleaseManager) DestroyFunc() interface{} {
 	return rm.destroy
 }
@@ -32,7 +32,7 @@ func (rm *ReleaseManager) DestroyFunc() interface{} {
 // can also be injected.
 //
 // The output parameters for PushFunc must be a Struct which can
-// be serialzied to Protocol Buffers binary format and an error.
+// be serialized to Protocol Buffers binary format and an error.
 // This Output Value will be made available for other functions
 // as an input parameter.
 //
