@@ -4,6 +4,7 @@ import (
 	"code.cloudfoundry.org/cli/types"
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/hashicorp/go-hclog"
 	"github.com/swisscom/waypoint-plugin-cloudfoundry/utils"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -98,11 +99,8 @@ func (p *Platform) DeployFunc() interface{} {
 func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI, img *docker.Image, job *component.JobInfo, source *component.Source, deploymentConfig *component.DeploymentConfig) (*Deployment, error) {
 	// Create result
 	var deployment Deployment
-	id, err := component.Id()
-	if err != nil {
-		return nil, err
-	}
-	deployment.Id = id
+	var err error
+	deployment.Id = uuid.New().String()[:8]
 
 	sg := ui.StepGroup()
 
@@ -136,6 +134,7 @@ func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 	step.Done()
 
 	appName := source.App
+	log.Debug("deployment name generation", "deployment", deployment.Id, "appName", appName)
 	deployment.Name = fmt.Sprintf("%v-%v", appName, deployment.Id)
 
 	step = sg.Add("Connecting to Cloud Foundry")
@@ -384,6 +383,17 @@ func (b *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 	deployment.Url = route.URL
 
 	return &deployment, nil
+}
+
+func (p *Platform) Generation(ctx context.Context,
+	log hclog.Logger,
+) ([]byte, error) {
+	return uuid.New().MarshalBinary()
+}
+
+// GenerationFunc implements component.Generation
+func (p *Platform) GenerationFunc() interface{} {
+	return p.Generation
 }
 
 func parseQuantity(entry string) (uint64, error) {

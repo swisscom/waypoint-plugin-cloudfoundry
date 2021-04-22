@@ -21,6 +21,7 @@ require (
 	github.com/cppforlife/go-patch v0.2.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/google/uuid v1.2.0 // indirect
 	github.com/hashicorp/go-hclog v0.14.1 // indirect
 	github.com/hashicorp/waypoint v0.3.1
 	github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210420153757-b55c787a65ff
