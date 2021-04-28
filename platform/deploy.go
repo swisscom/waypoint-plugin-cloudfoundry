@@ -437,4 +437,4 @@ func addFilteredEnvVar(envVars ccv3.EnvironmentVariables, k string, v string) {
 	}
 }
 
-var _ component.Deployment = (*Deployment)(nil)
+var _ component.DeploymentWithUrl = (*Deployment)(nil)
