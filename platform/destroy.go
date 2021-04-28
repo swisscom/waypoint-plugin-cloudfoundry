@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/waypoint-plugin-sdk/terminal"
 )
 
-// Implement the Destroyer interface
+// DestroyFunc implements the Destroyer interface
 func (p *Platform) DestroyFunc() interface{} {
 	return p.destroy
 }
@@ -41,7 +41,7 @@ func (p *Platform) DestroyFunc() interface{} {
 //
 // If an error is returned, Waypoint stops the execution flow and
 // returns an error to the user.
-func (b *Platform) destroy(ctx context.Context, ui terminal.UI, deployment *Deployment, source *component.Source) error {
+func (p *Platform) destroy(ctx context.Context, ui terminal.UI, deployment *Deployment, source *component.Source) error {
 	appName := source.App
 	deploymentName := fmt.Sprintf("%v-%v", appName, deployment.Id)
 

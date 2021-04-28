@@ -20,15 +20,23 @@ protos:
 # Builds the plugin on your local machine
 build:
 	@echo ""
-	@echo "Compile Plugin"
+	@echo "Compile Plugin for current target"
+
+	# Clear the output
+	rm -rf ./bin
+	GOARCH=amd64 go build -o ./bin/${_ARCH}_amd64/waypoint-plugin-${PLUGIN_NAME} ./main.go
+
+build_all:
+	@echo ""
+	@echo "Compile Plugin for all targets"
 
 	# Clear the output
 	rm -rf ./bin
 
-	GOOS=linux GOARCH=amd64 go build -o ./bin/linux_amd64/waypoint-plugin-${PLUGIN_NAME} ./main.go 
-	GOOS=darwin GOARCH=amd64 go build -o ./bin/darwin_amd64/waypoint-plugin-${PLUGIN_NAME} ./main.go 
-	GOOS=windows GOARCH=amd64 go build -o ./bin/windows_amd64/waypoint-plugin-${PLUGIN_NAME}.exe ./main.go 
-	GOOS=windows GOARCH=386 go build -o ./bin/windows_386/waypoint-plugin-${PLUGIN_NAME}.exe ./main.go 
+	GOOS=linux GOARCH=amd64 go build -o ./bin/linux_amd64/waypoint-plugin-${PLUGIN_NAME} ./main.go
+	GOOS=darwin GOARCH=amd64 go build -o ./bin/darwin_amd64/waypoint-plugin-${PLUGIN_NAME} ./main.go
+	GOOS=windows GOARCH=amd64 go build -o ./bin/windows_amd64/waypoint-plugin-${PLUGIN_NAME}.exe ./main.go
+	GOOS=windows GOARCH=386 go build -o ./bin/windows_386/waypoint-plugin-${PLUGIN_NAME}.exe ./main.go
 
 # Install the plugin locally
 install:

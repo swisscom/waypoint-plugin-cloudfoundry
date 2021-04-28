@@ -20,8 +20,8 @@ require (
 	github.com/cloudfoundry/bosh-utils v0.0.0-20210410100138-8d515c41dac9 // indirect
 	github.com/cppforlife/go-patch v0.2.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.2 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/hashicorp/go-hclog v0.14.1 // indirect
+	github.com/google/uuid v1.2.0
+	github.com/hashicorp/go-hclog v0.14.1
 	github.com/hashicorp/waypoint v0.3.1
 	github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210420153757-b55c787a65ff
 	github.com/lunixbochs/vtclean v1.0.0 // indirect
@@ -31,7 +31,7 @@ require (
 	github.com/tedsuo/rata v1.0.0 // indirect
 	github.com/vito/go-interact v1.0.0 // indirect
 	google.golang.org/protobuf v1.26.0
-	k8s.io/apimachinery v0.19.4 // indirect
+	k8s.io/apimachinery v0.19.4
 )
 
-// replace github.com/hashicorp/waypoint-plugin-sdk => ../../waypoint-plugin-sdk
+replace github.com/hashicorp/waypoint-plugin-sdk => github.com/swisscom/waypoint-plugin-sdk v0.0.0-20210426082641-d2f8c888d724
