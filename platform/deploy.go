@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/swisscom/waypoint-plugin-cloudfoundry/utils"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"os"
 	"time"
 
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
@@ -29,14 +30,18 @@ type QuotaConfig struct {
 	Instances uint64 `hcl:"instances,optional"`
 }
 
+type DockerConfig struct {
+	Username string `hcl:"username"`
+}
+
 type Config struct {
-	Organisation      string            `hcl:"organisation"`
-	Space             string            `hcl:"space"`
-	DockerEncodedAuth string            `hcl:"docker_encoded_auth,optional"`
-	Domain            string            `hcl:"domain"`
-	Quota             *QuotaConfig      `hcl:"quota,block"`
-	Env               map[string]string `hcl:"env,optional"`
-	EnvFromFile       string            `hcl:"envFromFile,optional"`
+	Organisation string            `hcl:"organisation"`
+	Space        string            `hcl:"space"`
+	Docker       *DockerConfig     `hcl:"docker,block"`
+	Domain       string            `hcl:"domain"`
+	Quota        *QuotaConfig      `hcl:"quota,block"`
+	Env          map[string]string `hcl:"env,optional"`
+	EnvFromFile  string            `hcl:"envFromFile,optional"`
 }
 
 type Platform struct {
@@ -244,7 +249,7 @@ func (p *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 		}
 
 		if instances != 0 {
-			newP.Instances = types.NullInt {
+			newP.Instances = types.NullInt{
 				IsSet: true,
 				Value: int(instances),
 			}
@@ -269,11 +274,17 @@ func (p *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 		},
 	}
 
-	dockerUsername, dockerPassword, err := getDockerCredentialsFromEncodedAuth(p.config.DockerEncodedAuth)
-	// only set docker credentials if they were provided correctly
-	if err == nil {
-		dockerPackage.DockerUsername = dockerUsername
-		dockerPackage.DockerPassword = dockerPassword
+	// Docker pull credentials
+	if p.config.Docker != nil {
+		// Using docker credentials
+		dockerPackage.DockerUsername = p.config.Docker.Username
+
+		// Docker password from env variable
+		dockerPackage.DockerPassword = os.Getenv("CF_DOCKER_PASSWORD")
+		if dockerPackage.DockerPassword == "" {
+			step.Abort()
+			return nil, fmt.Errorf("invalid docker credentials: %s", errDockerPasswordEmpty)
+		}
 	}
 
 	cfPackage, _, err := client.CreatePackage(dockerPackage)
@@ -282,30 +293,7 @@ func (p *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 	}
 	step.Done()
 
-	// Create build for package
-	step = sg.Add(fmt.Sprintf("Creating a new build for the created package of image %v", cfPackage.DockerImage))
-	cfBuild, _, err := client.CreateBuild(ccv3.Build{
-		PackageGUID: cfPackage.GUID,
-	})
-	if err != nil {
-		step.Abort()
-		return nil, fmt.Errorf("failed to create build: %v", err)
-	}
-
-	// Wait for droplet to become ready
-	for {
-		if cfBuild.State == constant.BuildStaged {
-			break
-		} else if cfBuild.State == constant.BuildFailed {
-			step.Abort()
-			return nil, fmt.Errorf("staging build failed: %v", cfBuild.Error)
-		}
-		time.Sleep(time.Second)
-		cfBuild, _, _ = client.GetBuild(cfBuild.GUID)
-		step.Update(fmt.Sprintf("Creating a new build for the created package of image %v [%v]", cfPackage.DockerImage, cfBuild.State))
-	}
-	step.Done()
-
+	// Set environment variables to app
 	if len(p.config.Env) != 0 || p.config.EnvFromFile != "" {
 		step = sg.Add("Assigning environment variables")
 		envVars := ccv3.EnvironmentVariables{}
@@ -335,6 +323,35 @@ func (p *Platform) deploy(ctx context.Context, log hclog.Logger, ui terminal.UI,
 		}
 		step.Done()
 	}
+
+	// Create build for package
+	step = sg.Add(fmt.Sprintf("Creating a new build for the created package of image %v", cfPackage.DockerImage))
+	cfBuild, _, err := client.CreateBuild(ccv3.Build{
+		PackageGUID: cfPackage.GUID,
+	})
+	if err != nil {
+		step.Abort()
+		return nil, fmt.Errorf("failed to create build: %v", err)
+	}
+
+	// Wait for droplet to become ready
+	for {
+		if cfBuild.State == constant.BuildStaged {
+			break
+		} else if cfBuild.State == constant.BuildFailed {
+			step.Abort()
+			return nil, fmt.Errorf("staging build failed: %v", cfBuild.Error)
+		}
+		time.Sleep(1 * time.Second)
+		cfBuild, _, _ = client.GetBuild(cfBuild.GUID)
+		step.Update(
+			fmt.Sprintf("Creating a new build for the created package of image %v [%v]",
+				cfPackage.DockerImage,
+				cfBuild.State,
+			),
+		)
+	}
+	step.Done()
 
 	// Create deployment
 	step = sg.Add("Creating a new deployment")
