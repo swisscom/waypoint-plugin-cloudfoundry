@@ -168,6 +168,9 @@ func (p *Platform) deploy(
 	}
 
 	err = p.deleteApp(&state, 0)
+	if err != nil {
+		return nil, err
+	}
 
 	// Create app
 	state.app, err = p.createApp(&state)
