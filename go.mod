@@ -34,4 +34,4 @@ require (
 	k8s.io/apimachinery v0.19.4
 )
 
-replace github.com/hashicorp/waypoint-plugin-sdk => github.com/swisscom/waypoint-plugin-sdk v0.0.0-20210426082641-d2f8c888d724
+replace github.com/hashicorp/waypoint-plugin-sdk => github.com/swisscom/waypoint-plugin-sdk v0.0.0-20210430074629-779a238ff740
