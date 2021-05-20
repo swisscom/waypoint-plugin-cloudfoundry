@@ -83,12 +83,12 @@ type DeploymentState struct {
 	space       *resources.Space
 	org         *resources.Organization
 	img         *docker.Image
-	cfPackage   *ccv3.Package
+	cfPackage   *resources.Package
 	quotaParams *QuotaParams
 	app         *resources.Application
 	appExists   bool
 	apps        []resources.Application
-	cfBuild     *ccv3.Build
+	cfBuild     *resources.Build
 	route       *resources.Route
 }
 
@@ -172,7 +172,6 @@ func (p *Platform) deploy(
 		return nil, err
 	}
 
-	// Create app
 	state.app, err = p.createApp(&state)
 	if err != nil {
 		return nil, err
@@ -184,7 +183,6 @@ func (p *Platform) deploy(
 		return nil, err
 	}
 
-	// Create package
 	state.cfPackage, err = p.createPackage(state)
 	if err != nil {
 		return nil, err
@@ -205,7 +203,11 @@ func (p *Platform) deploy(
 		return nil, err
 	}
 
-	// Bind route
+	err = p.bindServices(&state)
+	if err != nil {
+		return nil, err
+	}
+
 	err = p.bindRoute(&state)
 	if err != nil {
 		return nil, err
@@ -248,12 +250,12 @@ func (p *Platform) GenerationFunc() interface{} {
 	return p.Generation
 }
 
-func (p *Platform) createPackage(state DeploymentState) (*ccv3.Package, error) {
+func (p *Platform) createPackage(state DeploymentState) (*resources.Package, error) {
 	step := (*state.sg).Add(fmt.Sprintf("Creating new package for docker image %s:%s in app",
 		state.img.Image,
 		state.img.Tag,
 	))
-	dockerPackage := ccv3.Package{
+	dockerPackage := resources.Package{
 		Type:        constant.PackageTypeDocker,
 		DockerImage: fmt.Sprintf("%s:%s", state.img.Image, state.img.Tag),
 		Relationships: resources.Relationships{
@@ -312,7 +314,7 @@ func (p *Platform) configureQuota(state DeploymentState) error {
 			return fmt.Errorf("no processes found")
 		}
 
-		newP := ccv3.Process{
+		newP := resources.Process{
 			Type: "web",
 		}
 		if state.quotaParams.memoryMb != 0 {
@@ -446,8 +448,8 @@ func (p *Platform) createBuild(state *DeploymentState) error {
 	// Create build for package
 	step := (*state.sg).Add(
 		fmt.Sprintf("Creating a new build for the created package of image %v",
-		state.cfPackage.DockerImage))
-	cfBuild, _, err := state.client.CreateBuild(ccv3.Build{
+			state.cfPackage.DockerImage))
+	cfBuild, _, err := state.client.CreateBuild(resources.Build{
 		PackageGUID: state.cfPackage.GUID,
 	})
 	if err != nil {
@@ -538,7 +540,7 @@ func (p *Platform) setEnvironmentVariables(state *DeploymentState) error {
 	// Set environment variables to app
 	if len(p.config.Env) != 0 || p.config.EnvFromFile != "" {
 		step := (*state.sg).Add("Assigning environment variables")
-		envVars := ccv3.EnvironmentVariables{}
+		envVars := resources.EnvironmentVariables{}
 
 		// Precedence: envFromFile, env
 		if p.config.EnvFromFile != "" {
@@ -568,6 +570,53 @@ func (p *Platform) setEnvironmentVariables(state *DeploymentState) error {
 	return nil
 }
 
+func (p *Platform) bindServices(state *DeploymentState) error {
+	if len(p.config.ServiceBindings) > 0 {
+		step := (*state.sg).Add("Binding services")
+		// get ServiceBind Repository
+		sbRepo, err := GetServiceBindRepository()
+		if err != nil {
+			step.Abort()
+			return fmt.Errorf("unable to get ServiceBind Repository: %v", err)
+		}
+
+		for _, serviceName := range p.config.ServiceBindings {
+			// find service
+			serviceInstances, _, _, err := state.client.GetServiceInstances(ccv3.Query{
+				Key:    ccv3.OrganizationGUIDFilter,
+				Values: []string{state.deployment.OrganisationGUID},
+			}, ccv3.Query{
+				Key:    ccv3.SpaceGUIDFilter,
+				Values: []string{state.deployment.SpaceGUID},
+			}, ccv3.Query{
+				Key:    ccv3.NameFilter,
+				Values: []string{serviceName},
+			})
+			if err != nil {
+				step.Abort()
+				return fmt.Errorf("unable to get service %s: %v", serviceName, err)
+			}
+
+			if len(serviceInstances) != 1 {
+				step.Abort()
+				return fmt.Errorf("found %d service instances with the name \"%s\"",
+					len(serviceInstances),
+					serviceName,
+				)
+			}
+
+			// bind service
+			err = sbRepo.Create(serviceInstances[0].GUID, state.app.GUID, map[string]interface{}{})
+			if err != nil {
+				step.Abort()
+				return fmt.Errorf("unable to bind service %s to app: %v", serviceName, err)
+			}
+		}
+		step.Done()
+	}
+	return nil
+}
+
 func parseQuantity(entry string) (uint64, error) {
 	quantity, err := resource.ParseQuantity(entry)
 	if err != nil {
@@ -580,7 +629,7 @@ func parseQuantity(entry string) (uint64, error) {
 	return uint64(cv) / 1024 / 1024, nil
 }
 
-func addFilteredEnvVar(envVars ccv3.EnvironmentVariables, k string, v string) {
+func addFilteredEnvVar(envVars resources.EnvironmentVariables, k string, v string) {
 	filteredString := types.NewFilteredString(v)
 	if filteredString != nil {
 		envVars[k] = *filteredString

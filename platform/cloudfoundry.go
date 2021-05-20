@@ -1,22 +1,24 @@
 package platform
 
 import (
-	"encoding/base64"
-	"fmt"
-	"strings"
-
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
 	ccWrapper "code.cloudfoundry.org/cli/api/cloudcontroller/wrapper"
-	"code.cloudfoundry.org/cli/api/uaa"
-	uaaWrapper "code.cloudfoundry.org/cli/api/uaa/wrapper"
+	"code.cloudfoundry.org/cli/cf/api"
+	"code.cloudfoundry.org/cli/cf/configuration/confighelpers"
+	"code.cloudfoundry.org/cli/cf/configuration/coreconfig"
+	"code.cloudfoundry.org/cli/cf/net"
+	"code.cloudfoundry.org/cli/cf/terminal"
+	"code.cloudfoundry.org/cli/cf/trace"
 	"code.cloudfoundry.org/cli/resources"
 	"code.cloudfoundry.org/cli/util/configv3"
-	"github.com/hashicorp/waypoint-plugin-sdk/terminal"
+	"fmt"
+	wpTerm "github.com/hashicorp/waypoint-plugin-sdk/terminal"
+	"time"
 )
 
 var UserAgent = "waypoint-plugin-cloudfoundry/v" + Version
 
-func selectOrgAndSpace(b *Platform, client *ccv3.Client, sg terminal.StepGroup) (resources.Organization, resources.Space, error) {
+func selectOrgAndSpace(b *Platform, client *ccv3.Client, sg wpTerm.StepGroup) (resources.Organization, resources.Space, error) {
 	var org resources.Organization
 	var space resources.Space
 
@@ -70,50 +72,70 @@ func GetEnvClient() (*ccv3.Client, error) {
 		Wrappers:           ccWrappers,
 	})
 
-	_, _, err = ccClient.TargetCF(ccv3.TargetSettings{
+	ccClient.TargetCF(ccv3.TargetSettings{
 		URL:               config.Target(),
 		SkipSSLValidation: config.SkipSSLValidation(),
 		DialTimeout:       config.DialTimeout(),
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	uaaClient := uaa.NewClient(config)
-
-	uaaAuthWrapper := uaaWrapper.NewUAAAuthentication(nil, config)
-	uaaClient.WrapConnection(uaaAuthWrapper)
-	uaaClient.WrapConnection(uaaWrapper.NewRetryRequest(config.RequestRetryCount()))
-
-	err = uaaClient.SetupResources(config.ConfigFile.AuthorizationEndpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	uaaAuthWrapper.SetClient(uaaClient)
-	authWrapper.SetClient(uaaClient)
 	return ccClient, nil
 }
 
-func getDockerCredentialsFromEncodedAuth(encodedAuth string) (string, string, error) {
-	username, password, err := parseEncodedAuth(encodedAuth, ":")
-	if err != nil {
-		return "", "", fmt.Errorf("invalid auth data: %v", err)
-	}
-
-	return username, password, nil
+type noPrinter struct {
+	
 }
 
-func parseEncodedAuth(encodedAuth string, sep string) (string, string, error) {
-	decodedCreds, err := base64.StdEncoding.DecodeString(encodedAuth)
+type noTerminalPrinter struct {
+
+}
+
+func (t noTerminalPrinter) Print(a ...interface{}) (n int, err error) {
+	return 0, nil
+}
+
+func (t noTerminalPrinter) Printf(format string, a ...interface{}) (n int, err error) {
+	return 0, nil
+}
+
+func (t noTerminalPrinter) Println(a ...interface{}) (n int, err error) {
+	return 0, nil
+}
+
+func (n noPrinter) Print(v ...interface{}) {}
+
+func (n noPrinter) Printf(format string, v ...interface{}) {}
+
+func (n noPrinter) Println(v ...interface{}) {}
+
+func (n noPrinter) WritesToConsole() bool {
+	return false
+}
+
+var _ trace.Printer = noPrinter{}
+
+var _ terminal.Printer = noTerminalPrinter{}
+
+func GetServiceBindRepository() (api.ServiceBindingRepository, error) {
+	configPath, err := confighelpers.DefaultFilePath()
 	if err != nil {
-		return "", "", fmt.Errorf("invalid base64 string")
+		return nil, err
 	}
 
-	split := strings.Split(string(decodedCreds), sep)
-	if len(split) != 2 {
-		return "", "", fmt.Errorf("invalid format")
+	var theError error
+	errHandler := func(err error){
+		theError = err
+	}
+	config := coreconfig.NewRepositoryFromFilepath(configPath, errHandler)
+	if theError != nil {
+		return nil, theError
 	}
 
-	return split[0], split[1], nil
+	ui := terminal.NewUI(nil, nil, noTerminalPrinter{}, noPrinter{})
+	controllerGateway := net.NewCloudControllerGateway(
+		config,
+		time.Now,
+		ui,
+		noPrinter{},
+		"")
+
+	return api.NewCloudControllerServiceBindingRepository(config, controllerGateway), nil
 }
