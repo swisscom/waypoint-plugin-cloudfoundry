@@ -204,6 +204,9 @@ func (p *Platform) deploy(
 
 	// Bind route
 	err = p.bindRoute(&state)
+	if err != nil {
+		return nil, err
+	}
 
 	log.Debug("route_url", "url", state.route.URL)
 	state.deployment.Url = state.route.URL
