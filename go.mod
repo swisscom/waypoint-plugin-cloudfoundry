@@ -13,6 +13,9 @@ require (
 	k8s.io/apimachinery v0.19.4
 )
 
-replace github.com/hashicorp/waypoint-plugin-sdk => github.com/swisscom/waypoint-plugin-sdk v0.0.0-20210430074629-779a238ff740
+// Pin because of https://github.com/cloudfoundry/log-cache-release/issues/41
+replace google.golang.org/protobuf => google.golang.org/protobuf v1.25.0
 
-replace code.cloudfoundry.org/cli => github.com/swisscom/cloudfoundry-cli v0.0.0-20210520162330-e7a89d2f04f9
+replace github.com/hashicorp/waypoint-plugin-sdk => github.com/swisscom/waypoint-plugin-sdk v0.0.0-20210521132504-fc5f96241be1
+
+replace code.cloudfoundry.org/cli => github.com/swisscom/cloudfoundry-cli v0.0.0-20210521140856-c01ddabd05f7

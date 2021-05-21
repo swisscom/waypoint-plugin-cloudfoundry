@@ -3,6 +3,8 @@ package platform
 import (
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
 	ccWrapper "code.cloudfoundry.org/cli/api/cloudcontroller/wrapper"
+	"code.cloudfoundry.org/cli/api/uaa"
+	uaaWrapper "code.cloudfoundry.org/cli/api/uaa/wrapper"
 	"code.cloudfoundry.org/cli/cf/api"
 	"code.cloudfoundry.org/cli/cf/configuration/confighelpers"
 	"code.cloudfoundry.org/cli/cf/configuration/coreconfig"
@@ -77,6 +79,19 @@ func GetEnvClient() (*ccv3.Client, error) {
 		SkipSSLValidation: config.SkipSSLValidation(),
 		DialTimeout:       config.DialTimeout(),
 	})
+	uaaClient := uaa.NewClient(config)
+
+	uaaAuthWrapper := uaaWrapper.NewUAAAuthentication(nil, config)
+	uaaClient.WrapConnection(uaaAuthWrapper)
+	uaaClient.WrapConnection(uaaWrapper.NewRetryRequest(config.RequestRetryCount()))
+
+	err = uaaClient.SetupResources(config.ConfigFile.UAAEndpoint, config.ConfigFile.AuthorizationEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	uaaAuthWrapper.SetClient(uaaClient)
+	authWrapper.SetClient(uaaClient)
 	return ccClient, nil
 }
 

@@ -2,6 +2,7 @@ package platform
 
 import (
 	"code.cloudfoundry.org/cli/types"
+	"context"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-hclog"
@@ -73,7 +74,7 @@ func (p *Platform) ConfigSet(config interface{}) error {
 // DeployFunc implements Builder
 func (p *Platform) DeployFunc() interface{} {
 	// return a function which will be called by Waypoint
-	return p.deploy
+	return p.Deploy
 }
 
 type DeploymentState struct {
@@ -109,22 +110,16 @@ type DeploymentState struct {
 // - terminal.UI
 // - *component.LabelSet
 
-// In addition to default input parameters the registry.Artifact from the Build step
-// can also be injected.
-//
-// The output parameters for BuildFunc must be a Struct which can
-// be serialized to Protocol Buffers binary format and an error.
-// This Output Value will be made available for other functions
-// as an input parameter.
-// If an error is returned, Waypoint stops the execution flow and
-// returns an error to the user.
-func (p *Platform) deploy(
+func (p *Platform) Deploy(
+	ctx context.Context,
 	log hclog.Logger,
-	ui terminal.UI,
+	src *component.Source,
 	img *docker.Image,
-	source *component.Source) (*Deployment, error) {
+	deployConfig *component.DeploymentConfig,
+	ui terminal.UI,
+) (*Deployment, error) {
 	state := DeploymentState{
-		img:        img,
+		img: img,
 		deployment: &Deployment{},
 	}
 
@@ -142,7 +137,7 @@ func (p *Platform) deploy(
 		return nil, err
 	}
 
-	appName := source.App
+	appName := src.App
 	log.Debug("deployment name generation", "deployment", state.deployment.Id, "appName", appName)
 	state.deployment.Name = fmt.Sprintf("%v-%v", appName, state.deployment.Id)
 
@@ -355,6 +350,8 @@ type QuotaParams struct {
 
 func (p *Platform) validateQuota(state *DeploymentState) error {
 	var err error
+
+	p.log.Debug("validate quota")
 
 	step := (*state.sg).Add("Validating parameters")
 	state.quotaParams = &QuotaParams{}
