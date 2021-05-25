@@ -271,9 +271,12 @@ func (p *Platform) createPackage(state DeploymentState) (*resources.Package, err
 		}
 	}
 
-	cfPackage, _, err := state.client.CreatePackage(dockerPackage)
+	cfPackage, warnings, err := state.client.CreatePackage(dockerPackage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create package: %v", err)
+	}
+	if len(warnings) > 0 {
+		p.log.Warn("warnings: %v", warnings)
 	}
 	step.Done()
 
@@ -446,7 +449,8 @@ func (p *Platform) createBuild(state *DeploymentState) error {
 	step := (*state.sg).Add(
 		fmt.Sprintf("Creating a new build for the created package of image %v",
 			state.cfPackage.DockerImage))
-	cfBuild, _, err := state.client.CreateBuild(resources.Build{
+
+	cfBuild, warnings, err := state.client.CreateBuild(resources.Build{
 		PackageGUID: state.cfPackage.GUID,
 	})
 	if err != nil {
@@ -454,21 +458,31 @@ func (p *Platform) createBuild(state *DeploymentState) error {
 		return fmt.Errorf("failed to create build: %v", err)
 	}
 
+	state.cfBuild = &cfBuild
+
+	p.log.Debug("build created", "cfbuild", fmt.Sprintf("%+v", cfBuild))
+
+	if len(warnings) > 0 {
+		p.log.Warn("warnings: %v", warnings)
+	}
+
 	// Wait for droplet to become ready
 	for {
-		if cfBuild.State == constant.BuildStaged {
+		if state.cfBuild.State == constant.BuildStaged {
 			break
-		} else if cfBuild.State == constant.BuildFailed {
+		} else if state.cfBuild.State == constant.BuildFailed || state.cfBuild.Error != "" {
 			step.Abort()
-			return fmt.Errorf("staging build failed: %v", cfBuild.Error)
+			return fmt.Errorf("staging build failed: %v", state.cfBuild.Error)
 		}
-		time.Sleep(1 * time.Second)
-		build, _, _ := state.client.GetBuild(cfBuild.GUID)
+
+		time.Sleep(2 * time.Second)
+		build, _, _ := state.client.GetBuild(state.cfBuild.GUID)
+		p.log.Debug("build update", "build", fmt.Sprintf("%+v", build))
 		state.cfBuild = &build
 		step.Update(
 			fmt.Sprintf("Creating a new build for the created package of image %v [%v]",
 				state.cfPackage.DockerImage,
-				cfBuild.State,
+				state.cfBuild.State,
 			),
 		)
 	}
