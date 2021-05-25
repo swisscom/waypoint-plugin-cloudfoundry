@@ -1,11 +1,13 @@
 package platform
 
 import (
+	"bytes"
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
 	ccWrapper "code.cloudfoundry.org/cli/api/cloudcontroller/wrapper"
 	"code.cloudfoundry.org/cli/api/uaa"
 	uaaWrapper "code.cloudfoundry.org/cli/api/uaa/wrapper"
 	"code.cloudfoundry.org/cli/cf/api"
+	"code.cloudfoundry.org/cli/cf/commandregistry"
 	"code.cloudfoundry.org/cli/cf/configuration/confighelpers"
 	"code.cloudfoundry.org/cli/cf/configuration/coreconfig"
 	"code.cloudfoundry.org/cli/cf/net"
@@ -54,10 +56,10 @@ func selectOrgAndSpace(b *Platform, client *ccv3.Client, sg wpTerm.StepGroup) (r
 	return org, space, nil
 }
 
-func GetEnvClient() (*ccv3.Client, error) {
+func getEnvClientConfig() (*ccv3.Client, *configv3.Config, error) {
 	config, err := configv3.LoadConfig(configv3.FlagOverride{})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var ccWrappers []ccv3.ConnectionWrapper
@@ -79,25 +81,41 @@ func GetEnvClient() (*ccv3.Client, error) {
 		SkipSSLValidation: config.SkipSSLValidation(),
 		DialTimeout:       config.DialTimeout(),
 	})
-	uaaClient := uaa.NewClient(config)
 
+	uaaClient := uaa.NewClient(config)
 	uaaAuthWrapper := uaaWrapper.NewUAAAuthentication(nil, config)
 	uaaClient.WrapConnection(uaaAuthWrapper)
 	uaaClient.WrapConnection(uaaWrapper.NewRetryRequest(config.RequestRetryCount()))
 
 	err = uaaClient.SetupResources(config.ConfigFile.UAAEndpoint, config.ConfigFile.AuthorizationEndpoint)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	uaaAuthWrapper.SetClient(uaaClient)
 	authWrapper.SetClient(uaaClient)
-	return ccClient, nil
+	return ccClient, config, nil
 }
 
-type noPrinter struct {
+func GetEnvClient() (*ccv3.Client, error) {
+	client, _, err := getEnvClientConfig()
+	return client, err
+}
+
+type stdoutPrinter struct {
 	
 }
+type noPrinter struct {
+
+}
+
+func (n noPrinter) Print(v ...interface{}) {}
+
+func (n noPrinter) Printf(format string, v ...interface{}) {}
+
+func (n noPrinter) Println(v ...interface{}) {}
+
+func (n noPrinter) WritesToConsole() bool { return false }
 
 type noTerminalPrinter struct {
 
@@ -115,16 +133,23 @@ func (t noTerminalPrinter) Println(a ...interface{}) (n int, err error) {
 	return 0, nil
 }
 
-func (n noPrinter) Print(v ...interface{}) {}
-
-func (n noPrinter) Printf(format string, v ...interface{}) {}
-
-func (n noPrinter) Println(v ...interface{}) {}
-
-func (n noPrinter) WritesToConsole() bool {
-	return false
+func (n stdoutPrinter) Print(v ...interface{}) {
+	fmt.Print(v...)
 }
 
+func (n stdoutPrinter) Printf(format string, v ...interface{}) {
+	fmt.Printf(format, v...)
+}
+
+func (n stdoutPrinter) Println(v ...interface{}) {
+	fmt.Println()
+}
+
+func (n stdoutPrinter) WritesToConsole() bool {
+	return true
+}
+
+var _ trace.Printer = stdoutPrinter{}
 var _ trace.Printer = noPrinter{}
 
 var _ terminal.Printer = noTerminalPrinter{}
@@ -144,13 +169,16 @@ func GetServiceBindRepository() (api.ServiceBindingRepository, error) {
 		return nil, theError
 	}
 
-	ui := terminal.NewUI(nil, nil, noTerminalPrinter{}, noPrinter{})
-	controllerGateway := net.NewCloudControllerGateway(
-		config,
-		time.Now,
-		ui,
-		noPrinter{},
-		"")
+	var writerBuffer []byte
+	logger := noPrinter{}
 
-	return api.NewCloudControllerServiceBindingRepository(config, controllerGateway), nil
+	envDialTimeout := ""
+	deps := commandregistry.NewDependency(bytes.NewBuffer(writerBuffer), logger, envDialTimeout)
+	deps.Gateways = map[string]net.Gateway{
+		"cloud-controller": net.NewCloudControllerGateway(deps.Config, time.Now, deps.UI, logger, envDialTimeout),
+		"uaa":              net.NewUAAGateway(deps.Config, deps.UI, logger, envDialTimeout),
+		"routing-api":      net.NewRoutingAPIGateway(deps.Config, time.Now, deps.UI, logger, envDialTimeout),
+	}
+
+	return api.NewCloudControllerServiceBindingRepository(config, deps.Gateways["cloud-controller"]), nil
 }

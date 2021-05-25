@@ -612,11 +612,16 @@ func (p *Platform) bindServices(state *DeploymentState) error {
 				step.Abort()
 				return fmt.Errorf("found %d service instances with the name \"%s\"",
 					len(serviceInstances),
-					serviceName,
-				)
+					serviceName)
 			}
 
 			// bind service
+			p.log.Debug("create service binding",
+				"serviceInstance", serviceInstances[0],
+				"app", state.app,
+				"serviceInstanceGUID", serviceInstances[0].GUID,
+				"appGUID", state.app.GUID,
+			)
 			err = sbRepo.Create(serviceInstances[0].GUID, state.app.GUID, map[string]interface{}{})
 			if err != nil {
 				step.Abort()
