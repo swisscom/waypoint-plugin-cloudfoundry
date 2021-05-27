@@ -21,8 +21,6 @@ import (
 	"time"
 )
 
-var UserAgent = "waypoint-plugin-cloudfoundry/v" + Version
-
 func selectOrgAndSpace(b *Platform, client *ccv3.Client, sg wpTerm.StepGroup) (resources.Organization, resources.Space, error) {
 	var org resources.Organization
 	var space resources.Space
