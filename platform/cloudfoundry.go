@@ -7,6 +7,7 @@ import (
 	"code.cloudfoundry.org/cli/api/uaa"
 	uaaWrapper "code.cloudfoundry.org/cli/api/uaa/wrapper"
 	"code.cloudfoundry.org/cli/cf/api"
+	"code.cloudfoundry.org/cli/cf/api/authentication"
 	"code.cloudfoundry.org/cli/cf/commandregistry"
 	"code.cloudfoundry.org/cli/cf/configuration/confighelpers"
 	"code.cloudfoundry.org/cli/cf/configuration/coreconfig"
@@ -172,13 +173,22 @@ func GetServiceBindRepository() (api.ServiceBindingRepository, error) {
 	var writerBuffer []byte
 	logger := noPrinter{}
 
+
 	envDialTimeout := ""
 	deps := commandregistry.NewDependency(bytes.NewBuffer(writerBuffer), logger, envDialTimeout)
+	defer deps.Config.Close()
+
+	uaaGateway := net.NewUAAGateway(deps.Config, deps.UI, logger, envDialTimeout)
+	cloudController := net.NewCloudControllerGateway(deps.Config, time.Now, deps.UI, logger, envDialTimeout)
+
 	deps.Gateways = map[string]net.Gateway{
-		"cloud-controller": net.NewCloudControllerGateway(deps.Config, time.Now, deps.UI, logger, envDialTimeout),
-		"uaa":              net.NewUAAGateway(deps.Config, deps.UI, logger, envDialTimeout),
+		"cloud-controller": cloudController,
+		"uaa":              uaaGateway,
 		"routing-api":      net.NewRoutingAPIGateway(deps.Config, time.Now, deps.UI, logger, envDialTimeout),
 	}
 
-	return api.NewCloudControllerServiceBindingRepository(config, deps.Gateways["cloud-controller"]), nil
+	uaaRepository := authentication.NewUAARepository(uaaGateway, config, net.NewRequestDumper(noPrinter{}))
+	cloudController.SetTokenRefresher(uaaRepository)
+
+	return api.NewCloudControllerServiceBindingRepository(config, cloudController), nil
 }
