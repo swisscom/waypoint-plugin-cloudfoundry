@@ -7,7 +7,7 @@ endif
 
 .PHONY: all
 
-all: protos build
+all: protos build_all
 
 # Generate the Go code from Protocol Buffer definitions
 protos:
