@@ -119,7 +119,7 @@ func (p *Platform) Deploy(
 	ui terminal.UI,
 ) (*Deployment, error) {
 	state := DeploymentState{
-		img: img,
+		img:        img,
 		deployment: &Deployment{},
 	}
 

@@ -7,10 +7,8 @@ import (
 )
 
 type stdoutPrinter struct {
-
 }
 type noPrinter struct {
-
 }
 
 func (n noPrinter) Print(v ...interface{}) {}
@@ -22,7 +20,6 @@ func (n noPrinter) Println(v ...interface{}) {}
 func (n noPrinter) WritesToConsole() bool { return false }
 
 type noTerminalPrinter struct {
-
 }
 
 func (t noTerminalPrinter) Print(a ...interface{}) (n int, err error) {

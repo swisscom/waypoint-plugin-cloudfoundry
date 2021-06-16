@@ -106,7 +106,7 @@ func GetServiceBindRepository() (api.ServiceBindingRepository, error) {
 	}
 
 	var theError error
-	errHandler := func(err error){
+	errHandler := func(err error) {
 		theError = err
 	}
 	config := coreconfig.NewRepositoryFromFilepath(configPath, errHandler)
@@ -116,7 +116,6 @@ func GetServiceBindRepository() (api.ServiceBindingRepository, error) {
 
 	var writerBuffer []byte
 	logger := noPrinter{}
-
 
 	envDialTimeout := ""
 	deps := commandregistry.NewDependency(bytes.NewBuffer(writerBuffer), logger, envDialTimeout)

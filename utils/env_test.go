@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestParseEnv(t *testing.T){
+func TestParseEnv(t *testing.T) {
 	envs := utils.ParseEnv("HELLO=world\n#comment\n#COMMENT=ok\nKUBECONFIG=none")
 	assert.Equal(t, "world", envs["HELLO"])
 	assert.Equal(t, "none", envs["KUBECONFIG"])
