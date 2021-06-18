@@ -111,11 +111,11 @@ type DeploymentState struct {
 // - *component.LabelSet
 
 func (p *Platform) Deploy(
-	ctx context.Context,
+	_ context.Context,
 	log hclog.Logger,
 	src *component.Source,
 	img *docker.Image,
-	deployConfig *component.DeploymentConfig,
+	_ *component.DeploymentConfig,
 	ui terminal.UI,
 ) (*Deployment, error) {
 	state := DeploymentState{
@@ -188,17 +188,17 @@ func (p *Platform) Deploy(
 		return nil, err
 	}
 
+	err = p.bindServices(&state)
+	if err != nil {
+		return nil, err
+	}
+
 	err = p.createBuild(&state)
 	if err != nil {
 		return nil, err
 	}
 
 	err = p.createDeployment(&state)
-	if err != nil {
-		return nil, err
-	}
-
-	err = p.bindServices(&state)
 	if err != nil {
 		return nil, err
 	}
@@ -232,8 +232,8 @@ func (p *Platform) createApp(state *DeploymentState) (*resources.Application, er
 	return &app, nil
 }
 
-func (d *Deployment) URL() string {
-	return d.Url
+func (x *Deployment) URL() string {
+	return x.Url
 }
 
 func (p *Platform) Generation() ([]byte, error) {
