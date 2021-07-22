@@ -569,8 +569,9 @@ github.com/golang/protobuf v1.3.5/go.mod h1:6O5/vntMXwX2lRkT1hjjk0nAC1IDOTvTlVgj
 github.com/golang/protobuf v1.4.0/go.mod h1:jodUvKwWbYaEsadDk5Fwe5c77LiNKVO9IDvqG2KuDX0=
 github.com/golang/protobuf v1.4.1/go.mod h1:U8fpvMrcmy5pZrNK1lt4xCsGvpyWQ/VVv6QDs8UjoX8=
 github.com/golang/protobuf v1.4.2/go.mod h1:oDoupMAO8OvCJWAcko0GGGIgR6R6ocIYbsSw735rRwI=
-github.com/golang/protobuf v1.4.3 h1:JjCZWpVbqXDqFVmTfYWEVTMIYrL/NPdPSCHPJ0T/raM=
 github.com/golang/protobuf v1.4.3/go.mod h1:oDoupMAO8OvCJWAcko0GGGIgR6R6ocIYbsSw735rRwI=
+github.com/golang/protobuf v1.5.2 h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=
+github.com/golang/protobuf v1.5.2/go.mod h1:XVQd3VNwM+JqD3oG2Ue2ip4fOMUkwXdXDdiuN0vRsmY=
 github.com/golang/snappy v0.0.0-20170215233205-553a64147049/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
 github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
 github.com/golang/snappy v0.0.1/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
@@ -682,8 +683,9 @@ github.com/hashicorp/go-multierror v1.0.0/go.mod h1:dHtQlpGsu+cZNNAkkCN/P3hoUDHh
 github.com/hashicorp/go-multierror v1.1.0 h1:B9UzwGQJehnUY1yNrnwREHc3fGbC2xefo8g4TbElacI=
 github.com/hashicorp/go-multierror v1.1.0/go.mod h1:spPvp8C1qA32ftKqdAHm4hHTbPw+vmowP0z+KUhOZdA=
 github.com/hashicorp/go-plugin v1.0.1/go.mod h1:++UyYGoz3o5w9ZzAdZxtQKrWWP+iqPBn3cQptSMzBuY=
-github.com/hashicorp/go-plugin v1.3.0 h1:4d/wJojzvHV1I4i/rrjVaeuyxWrLzDE1mDCyDy8fXS8=
 github.com/hashicorp/go-plugin v1.3.0/go.mod h1:F9eH4LrE/ZsRdbwhfjs9k9HoDUwAHnYtXdgmf1AVNs0=
+github.com/hashicorp/go-plugin v1.4.2 h1:yFvG3ufXXpqiMiZx9HLcaK3XbIqQ1WJFR/F1a2CuVw0=
+github.com/hashicorp/go-plugin v1.4.2/go.mod h1:5fGEH17QVwTTcR0zV7yhDPLLmFX9YSZ38b18Udy6vYQ=
 github.com/hashicorp/go-retryablehttp v0.5.3/go.mod h1:9B5zBasrRhHXnJnui7y6sL7es7NDiJgTc6Er0maI1Xs=
 github.com/hashicorp/go-retryablehttp v0.5.4/go.mod h1:9B5zBasrRhHXnJnui7y6sL7es7NDiJgTc6Er0maI1Xs=
 github.com/hashicorp/go-retryablehttp v0.6.2/go.mod h1:gEx6HMUGxYYhJScX7W1Il64m6cc2C1mDaW3NQ9sY1FY=
@@ -729,8 +731,8 @@ github.com/hashicorp/waypoint v0.3.2 h1:G8SxJ/FtB0WOA2RNcVQNcIwxztVgSPsERsGeebRJ
 github.com/hashicorp/waypoint v0.3.2/go.mod h1:eb4wm7c/TKBWYwbnJpDFCF33ZKBcVXivQBpPK+1/bD8=
 github.com/hashicorp/waypoint-hzn v0.0.0-20201008221232-97cd4d9120b9/go.mod h1:ObgQSWSX9rsNofh16kctm6XxLW2QW1Ay6/9ris6T6DU=
 github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210510195008-b42c688ebedf/go.mod h1:Lwc83y1fKC2ktVgbU6jkKbgFNJuR3N+gSWpVHQ+0KSI=
-github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210608130902-0f906e8dad0b h1:A85w6nVhlOZNVT6rV42Rdu/hKunM96N7Gqh8ORYF1LI=
-github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210608130902-0f906e8dad0b/go.mod h1:3EzMFm8svUyyR35eop57AZmFBqFbIJVx6/MkALuNEjo=
+github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210714195507-d64bfe0a3ffa h1:TIk9jUpIScihbawdqg4JW6qZpID/fPPLTLMSmQKBSXg=
+github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210714195507-d64bfe0a3ffa/go.mod h1:l5rxDV4JfLCnMb/+0DxIjE40tHXPWbDyerz+f2Oul3I=
 github.com/hashicorp/yamux v0.0.0-20180604194846-3520598351bb/go.mod h1:+NfK9FKeTrX5uv1uIXGdwYDTeHna2qgaIlx54MXqjAM=
 github.com/hashicorp/yamux v0.0.0-20181012175058-2f1d1f20f75d/go.mod h1:+NfK9FKeTrX5uv1uIXGdwYDTeHna2qgaIlx54MXqjAM=
 github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d/go.mod h1:+NfK9FKeTrX5uv1uIXGdwYDTeHna2qgaIlx54MXqjAM=
