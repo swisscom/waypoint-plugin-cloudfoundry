@@ -12,45 +12,26 @@ import (
 	"github.com/swisscom/waypoint-plugin-cloudfoundry/platform"
 )
 
-type ReleaseConfig struct {
+type Config struct {
 	Domain   string `hcl:"domain"`
 	Hostname string `hcl:"hostname,optional"`
 }
 
-type ReleaseManager struct {
-	config ReleaseConfig
+type Manager struct {
+	config Config
 }
 
 // Config Implement Configurable
-func (rm *ReleaseManager) Config() (interface{}, error) {
+func (rm *Manager) Config() (interface{}, error) {
 	return &rm.config, nil
 }
 
 // ReleaseFunc Implement Builder
-func (rm *ReleaseManager) ReleaseFunc() interface{} {
+func (rm *Manager) ReleaseFunc() interface{} {
 	// return a function which will be called by Waypoint
 	return rm.release
 }
 
-// A BuildFunc does not have a strict signature, you can define the parameters
-// you need based on the Available parameters that the Waypoint SDK provides.
-// Waypoint will automatically inject parameters as specified
-// in the signature at run time.
-//
-// Available input parameters:
-// - context.Context
-// - *component.Source
-// - *component.JobInfo
-// - *component.DeploymentConfig
-// - *datadir.Project
-// - *datadir.App
-// - *datadir.Component
-// - hclog.Logger
-// - terminal.UI
-// - *component.LabelSet
-
-// In addition to default input parameters the platform.Deployment from the Deploy step
-// can also be injected.
 //
 // The output parameters for ReleaseFunc must be a Struct which can
 // be serialized to Protocol Buffers binary format and an error.
@@ -59,7 +40,13 @@ func (rm *ReleaseManager) ReleaseFunc() interface{} {
 //
 // If an error is returned, Waypoint stops the execution flow and
 // returns an error to the user.
-func (rm *ReleaseManager) release(ctx context.Context, log hclog.Logger, ui terminal.UI, src *component.Source, deployment *platform.Deployment) (*Release, error) {
+func (rm *Manager) release(
+	ctx context.Context,
+	log hclog.Logger,
+	ui terminal.UI,
+	src *component.Source,
+	deployment *platform.Deployment,
+) (*Release, error) {
 	var release Release
 
 	var hostname string
@@ -176,4 +163,4 @@ func (rm *ReleaseManager) release(ctx context.Context, log hclog.Logger, ui term
 func (r *Release) URL() string { return r.Url }
 
 var _ component.Release = (*Release)(nil)
-var _ component.ReleaseManager = (*ReleaseManager)(nil)
+var _ component.ReleaseManager = (*Manager)(nil)

@@ -78,7 +78,9 @@ func (p *Platform) DeployFunc() interface{} {
 }
 
 type DeploymentState struct {
-	deployment  *Deployment
+	deployment    *Deployment
+	shouldCleanup bool
+
 	sg          *terminal.StepGroup
 	client      *ccv3.Client
 	space       *resources.Space
@@ -168,6 +170,9 @@ func (p *Platform) Deploy(
 	}
 
 	state.app, err = p.createApp(&state)
+	state.shouldCleanup = true
+	defer p.cleanupResourcesOnFail(&state)
+
 	if err != nil {
 		return nil, err
 	}
@@ -203,10 +208,17 @@ func (p *Platform) Deploy(
 		return nil, err
 	}
 
+	err = p.waitProcess(&state)
+	if err != nil {
+		return nil, err
+	}
+
 	err = p.bindRoute(&state)
 	if err != nil {
 		return nil, err
 	}
+
+	state.shouldCleanup = false
 
 	log.Debug("route_url", "url", state.route.URL)
 	state.deployment.Url = state.route.URL
@@ -475,15 +487,14 @@ func (p *Platform) createBuild(state *DeploymentState) error {
 			return fmt.Errorf("staging build failed: %v", state.cfBuild.Error)
 		}
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 		build, _, _ := state.client.GetBuild(state.cfBuild.GUID)
 		p.log.Debug("build update", "build", fmt.Sprintf("%+v", build))
 		state.cfBuild = &build
 		step.Update(
 			fmt.Sprintf("Creating a new build for the created package of image %v [%v]",
 				state.cfPackage.DockerImage,
-				state.cfBuild.State,
-			),
+				state.cfBuild.State),
 		)
 	}
 	step.Done()
@@ -631,6 +642,101 @@ func (p *Platform) bindServices(state *DeploymentState) error {
 		step.Done()
 	}
 	return nil
+}
+
+func (p *Platform) cleanupResourcesOnFail(state *DeploymentState) {
+	if !state.shouldCleanup {
+		return
+	}
+
+	// Clean up resources that were created but failed
+	if state.deployment != nil {
+		_, w, err := state.client.DeleteApplication(state.deployment.AppGUID)
+		if err != nil {
+			p.log.Error("unable to delete application",
+				"guid", state.deployment.AppGUID,
+				"error", err,
+			)
+			return
+		}
+
+		if w != nil {
+			for _, warning := range w {
+				p.log.Warn("delete application warning", "warning", warning)
+			}
+		}
+	}
+}
+
+func (p *Platform) waitProcess(state *DeploymentState) error {
+	if state.deployment == nil {
+		return fmt.Errorf("unable to wait for a nil deployment")
+	}
+
+	applicationProcesses, warn, err := state.client.GetApplicationProcesses(state.deployment.AppGUID)
+	if err != nil {
+		return fmt.Errorf("unable to get application processes: %v", err)
+	}
+
+	if len(warn) > 0 {
+		p.log.Warn(
+			fmt.Sprintf("GetApplicationProcesses returned %d warnings", len(warn)),
+			"warnings",
+			warn,
+		)
+	}
+
+	startTime := time.Now()
+
+	for {
+		processes := map[resources.Process][]ccv3.ProcessInstance{}
+		if time.Now().After(startTime.Add(5 * time.Minute)) {
+			return fmt.Errorf(
+				"timeout: 5 minutes have passed but the application isn't started yet. "+
+					"deployment=%v, processes=%v",
+				state.deployment,
+				processes,
+			)
+		}
+
+		for _, proc := range applicationProcesses {
+			procInstances, warn, err := state.client.GetProcessInstances(proc.GUID)
+			if err != nil {
+				return fmt.Errorf("unable to get process instances for process %v", proc)
+			}
+			if len(warn) > 0 {
+				p.log.Warn(
+					fmt.Sprintf("GetProcessInstances returned %d warnings", len(warn)),
+					"warnings",
+					warn,
+				)
+			}
+			processes[proc] = procInstances
+		}
+
+		starting := false
+
+		// Check status
+		for process, processInstances := range processes {
+			for _, instance := range processInstances {
+				switch instance.State {
+				case constant.ProcessInstanceCrashed:
+					return fmt.Errorf("deployment failed: process crashed, process=%v, processInstance=%v",
+						process, instance,
+					)
+				case constant.ProcessInstanceStarting:
+					starting = true
+				}
+			}
+		}
+
+		if !starting {
+			p.log.Info("processes are ready!", "processes", processes)
+			return nil
+		}
+
+		time.Sleep(1 * time.Second)
+	}
 }
 
 func parseQuantity(entry string) (uint64, error) {
