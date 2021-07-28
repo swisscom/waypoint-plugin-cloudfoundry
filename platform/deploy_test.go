@@ -16,6 +16,7 @@ func TestDeploy(t *testing.T) {
 			Organisation: os.Getenv("CF_ORG"),
 			Space:        os.Getenv("CF_SPACE"),
 			Domain:       os.Getenv("CF_DOMAIN"),
+			DeploymentTimeoutSeconds: "10s",
 		},
 	}
 	logger := hclog.New(nil)

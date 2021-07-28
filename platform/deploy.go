@@ -35,14 +35,16 @@ type DockerConfig struct {
 }
 
 type Config struct {
-	Organisation    string            `hcl:"organisation"`
-	Space           string            `hcl:"space"`
-	Docker          *DockerConfig     `hcl:"docker,block"`
-	Domain          string            `hcl:"domain"`
-	Quota           *QuotaConfig      `hcl:"quota,block"`
-	Env             map[string]string `hcl:"env,optional"`
-	EnvFromFile     string            `hcl:"envFromFile,optional"`
-	ServiceBindings []string          `hcl:"serviceBindings,optional"`
+	Organisation             string            `hcl:"organisation"`
+	Space                    string            `hcl:"space"`
+	Docker                   *DockerConfig     `hcl:"docker,block"`
+	Domain                   string            `hcl:"domain"`
+	Quota                    *QuotaConfig      `hcl:"quota,block"`
+	Env                      map[string]string `hcl:"env,optional"`
+	EnvFromFile              string            `hcl:"envFromFile,optional"`
+	ServiceBindings          []string          `hcl:"serviceBindings,optional"`
+	DeploymentTimeoutSeconds string               `hcl:"deployment_timeout_seconds,optional"`
+	deploymentTimeout        time.Duration
 }
 
 type Platform struct {
@@ -135,6 +137,12 @@ func (p *Platform) Deploy(
 
 	// Parse quantities
 	err = p.validateQuota(&state)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate timeout value
+	err = p.parseTimeout()
 	if err != nil {
 		return nil, err
 	}
@@ -690,10 +698,11 @@ func (p *Platform) waitProcess(state *DeploymentState) error {
 
 	for {
 		processes := map[resources.Process][]ccv3.ProcessInstance{}
-		if time.Now().After(startTime.Add(5 * time.Minute)) {
+		if time.Now().After(startTime.Add(p.config.deploymentTimeout)) {
 			return fmt.Errorf(
-				"timeout: 5 minutes have passed but the application isn't started yet. "+
+				"timeout: %.0f seconds elapsed but the application isn't started yet. " +
 					"deployment=%v, processes=%v",
+				p.config.deploymentTimeout.Seconds(),
 				state.deployment,
 				processes,
 			)
@@ -737,6 +746,32 @@ func (p *Platform) waitProcess(state *DeploymentState) error {
 
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func (p *Platform) parseTimeout() error {
+	if p.config.DeploymentTimeoutSeconds == "" {
+		// User didn't provide any timeout, using the default
+		p.config.deploymentTimeout = DefaultDeploymentTimeout
+		return nil
+	}
+
+	d, err := time.ParseDuration(p.config.DeploymentTimeoutSeconds)
+	if err != nil {
+		return err
+	}
+
+	if d < 0 {
+		return fmt.Errorf("duration cannot be negative")
+	}
+
+	if d == 0 {
+		p.log.Warn("duration cannot be 0, resetting to default")
+		p.config.deploymentTimeout = DefaultDeploymentTimeout
+	} else {
+		p.config.deploymentTimeout = d
+	}
+
+	return nil
 }
 
 func parseQuantity(entry string) (uint64, error) {
