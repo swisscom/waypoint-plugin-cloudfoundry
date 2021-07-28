@@ -5,6 +5,13 @@ _ARCH := $(shell ./print_arch)
 export _ARCH
 endif
 
+ifndef REGISTRY
+REGISTRY := ""
+endif
+
+IMAGE=swisscom/waypoint-plugin-cloudfoundry
+TAG := $(shell ./generate-tag.sh)
+
 .PHONY: all
 
 all: protos build_all
@@ -59,4 +66,8 @@ zip:
 # Build the plugin using a Docker container
 build-docker:
 	rm -rf ./releases
-	DOCKER_BUILDKIT=1 docker build --output releases --progress=plain .
+	docker build -t "$(REGISTRY)/$(IMAGE):$(TAG)" .
+
+push-docker:
+	docker push "$(REGISTRY)/$(IMAGE):$(TAG)"
+
