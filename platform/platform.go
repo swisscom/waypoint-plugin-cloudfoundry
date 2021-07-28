@@ -67,8 +67,94 @@ func (p *Platform) Status(
 	log hclog.Logger,
 	deployment *Deployment,
 	ui terminal.UI,
-) (proto.StatusReport, error) {
+) (*proto.StatusReport, error) {
+	var result proto.StatusReport
+	result.External = true
 
+	sg := ui.StepGroup()
+	defer sg.Wait()
+
+	var err error
+
+	step := sg.Add("Gathering health report for Cloud Foundry platform...")
+
+	// Status of the Platform
+	state := DeploymentState{}
+	state.sg = &sg
+	err = p.connectCloudFoundry(&state)
+	if err != nil {
+		ui.Output("Error connecting to Cloud Foundry: %s",
+			err,
+			terminal.WithErrorStyle(),
+		)
+		return nil, err
+	}
+
+	// Get processes by app
+	processes, warn, err := state.client.GetApplicationProcesses(deployment.AppGUID)
+	if err != nil {
+		ui.Output("Error getting application processes: %s",
+			err,
+			terminal.WithErrorStyle(),
+		)
+		return nil, err
+	}
+
+	p.listWarnings(warn)
+
+	processInstancesCount := 0
+	statusMap := map[constant.ProcessInstanceState]int{}
+
+	for _, proc := range processes {
+		// Get Health Check result
+		pInstances, warn, err := state.client.GetProcessInstances(proc.GUID)
+		if err != nil {
+			ui.Output("Error getting process instance for %s (part of %s): %s",
+				proc.GUID,
+				deployment.AppGUID,
+				err,
+				terminal.WithErrorStyle(),
+			)
+			return nil, err
+		}
+		p.listWarnings(warn)
+
+		for _, pi := range pInstances {
+			statusMap[pi.State]++
+			processInstancesCount++
+		}
+	}
+
+	if statusMap[constant.ProcessInstanceRunning] == processInstancesCount {
+		result.Health = proto.StatusReport_READY
+		result.HealthMessage = "all processes are reporting ready"
+	} else if statusMap[constant.ProcessInstanceCrashed] == processInstancesCount {
+		result.Health = proto.StatusReport_DOWN
+		result.HealthMessage = "all processes are crashed"
+	} else if statusMap[constant.ProcessInstanceStarting] == processInstancesCount {
+		result.Health = proto.StatusReport_ALIVE
+		result.HealthMessage = "all processes are starting"
+	} else if statusMap[constant.ProcessInstanceDown] == processInstancesCount {
+		result.Health = proto.StatusReport_DOWN
+		result.HealthMessage = "all processes are reporting down"
+	} else {
+		result.Health = proto.StatusReport_PARTIAL
+		result.HealthMessage = fmt.Sprintf(
+			"all processes are reporting mixed status: %v",
+			statusMap,
+		)
+	}
+
+	step.Done()
+	return &result, nil
+}
+
+func (p *Platform) listWarnings(warn ccv3.Warnings) {
+	if len(warn) > 0 {
+		for _, w := range warn {
+			p.log.Warn("Cloud Foundry warning", "warning", w)
+		}
+	}
 }
 
 // Config implements Configurable
@@ -782,6 +868,54 @@ func (p *Platform) parseTimeout() error {
 	}
 
 	return nil
+}
+
+func (p *Platform) getOrganizationByName(org string, state *DeploymentState) (*resources.Organization, error) {
+	organizations, warnings, err := state.client.GetOrganizations(ccv3.Query{
+		Key:    ccv3.NameFilter,
+		Values: []string{p.config.Organisation},
+	})
+	if err != nil {
+		return nil, err
+	}
+	p.listWarnings(warnings)
+	if len(organizations) == 0 {
+		return nil, fmt.Errorf("organization %s not found", org)
+	}
+	if len(organizations) > 1 {
+		return nil, fmt.Errorf("two organizations with the same name found")
+	}
+
+	return &organizations[0], nil
+}
+
+func (p *Platform) getSpaceByName(space string, org *resources.Organization, state *DeploymentState) (*resources.Space, error) {
+	spaces, _, warnings, err := state.client.GetSpaces(
+		ccv3.Query{
+			Key:    ccv3.OrganizationGUIDFilter,
+			Values: []string{org.GUID},
+		},
+		ccv3.Query{
+			Key:    ccv3.NameFilter,
+			Values: []string{space},
+		},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	p.listWarnings(warnings)
+
+	if len(spaces) == 0 {
+		return nil, fmt.Errorf("unable to find space %s", space)
+	}
+
+	if len(spaces) > 1 {
+		return nil, fmt.Errorf("getSpaceByName returned more than one space")
+	}
+
+	return &spaces[0], nil
 }
 
 func parseQuantity(entry string) (uint64, error) {
