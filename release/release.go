@@ -13,8 +13,9 @@ import (
 )
 
 type Config struct {
-	Domain   string `hcl:"domain"`
-	Hostname string `hcl:"hostname,optional"`
+	Domain           string   `hcl:"domain"`
+	Hostname         string   `hcl:"hostname,optional"`
+	AdditionalRoutes []string `hcl:"additional_routes,optional"`
 }
 
 type Manager struct {
@@ -52,8 +53,6 @@ func (rm *Manager) release(
 	var hostname string
 	if rm.config.Hostname != "" {
 		hostname = rm.config.Hostname
-	} else {
-		hostname = src.App
 	}
 
 	sg := ui.StepGroup()
@@ -109,7 +108,87 @@ func (rm *Manager) release(
 	}
 	domain := domains[0]
 
-	// Check if route exists already
+
+	// Map original route, if not empty
+	if hostname != "" {
+		route, err := getOrCreateRoute(hostname, domain, deployment.SpaceGUID, client)
+		if err != nil {
+			step.Abort()
+			return nil, fmt.Errorf("failed to get or create route: %v", err)
+		}
+
+		// Map route
+		_, err = client.MapRoute(route.GUID, deployment.AppGUID)
+		if err != nil {
+			step.Abort()
+			return nil, fmt.Errorf("failed to map route: %v", err)
+		}
+		step.Done()
+		release.Url = fmt.Sprintf("%v://%v", route.Protocol, route.URL)
+
+		step = sg.Add("unmapping other applications")
+		// Unmap all others applications
+		for _, destination := range route.Destinations {
+			step.Update(fmt.Sprintf("unmapping %v", destination.App.GUID))
+			_, err = client.UnmapRoute(route.GUID, destination.GUID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmap route from destination app with GUID %v", destination.App.GUID)
+			}
+		}
+		step.Done()
+	}
+
+
+	step = sg.Add("mapping additional routes (if available)")
+	for _, r := range rm.config.AdditionalRoutes {
+		route, err := getOrCreateRoute(r, domain, deployment.SpaceGUID, client)
+		if err != nil {
+			step.Abort()
+			return nil, fmt.Errorf("failed to get or create route: %v", err)
+		}
+
+		step.Update(fmt.Sprintf("mapping %v", r))
+		_, err = client.MapRoute(route.GUID, deployment.AppGUID)
+
+		if err != nil {
+			return nil, fmt.Errorf(
+				"unable to map route %v to app %v: %v",
+				r,
+				deployment.AppGUID,
+				err,
+			)
+		}
+
+		step = sg.Add(fmt.Sprintf("unmapping previous app from %v", r))
+
+		// Unmap other routes associated with this one
+		for _, dest := range route.Destinations {
+			step.Update("unmapping %v", dest.App.GUID)
+			_, err = client.UnmapRoute(route.GUID, dest.GUID)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"unable to unmap route %v from app %v: %v",
+					r,
+					dest.App.GUID,
+					err,
+				)
+			}
+		}
+		step.Done()
+	}
+	step.Done()
+
+
+
+	return &release, nil
+}
+
+func getOrCreateRoute(
+	hostname string,
+	domain resources.Domain,
+	spaceGuid string,
+	client *ccv3.Client,
+) (*resources.Route, error) {
 	routes, _, err := client.GetRoutes(ccv3.Query{
 		Key:    ccv3.DomainGUIDFilter,
 		Values: []string{domain.GUID},
@@ -117,47 +196,30 @@ func (rm *Manager) release(
 		Key:    ccv3.HostsFilter,
 		Values: []string{hostname},
 	})
+
 	if err != nil {
-		step.Abort()
-		return nil, fmt.Errorf("failed checking if route exists already: %v", err)
-	}
-	var route resources.Route
-	if len(routes) == 0 {
-		route, _, err = client.CreateRoute(resources.Route{
-			DomainGUID: domain.GUID,
-			SpaceGUID:  spaceGuid,
-			Host:       hostname,
-			Destinations: []resources.RouteDestination{{
-				App: resources.RouteDestinationApp{
-					GUID: deployment.AppGUID,
-				},
-			}},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed creating route: %v", err)
-		}
-	} else {
-		route = routes[0]
+		return nil, err
 	}
 
-	// Also map
-	_, err = client.MapRoute(route.GUID, deployment.AppGUID)
+	if len(routes) > 1 {
+		return nil, fmt.Errorf("more than one route returned")
+	}
+
+	if len(routes) == 1 {
+		return &routes[0], nil
+	}
+
+	route, _, err := client.CreateRoute(resources.Route{
+		DomainGUID: domain.GUID,
+		SpaceGUID:  spaceGuid,
+		Host:       hostname,
+	})
+
 	if err != nil {
-		step.Abort()
-		return nil, fmt.Errorf("failed to map route: %v", err)
-	}
-	step.Done()
-	release.Url = fmt.Sprintf("%v://%v", route.Protocol, route.URL)
-
-	// Unmap all other applications
-	for _, destination := range route.Destinations {
-		_, err = client.UnmapRoute(route.GUID, destination.GUID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmap route from destination app with GUID %v", destination.App.GUID)
-		}
+		return nil, err
 	}
 
-	return &release, nil
+	return &route, nil
 }
 
 func (r *Release) URL() string { return r.Url }
