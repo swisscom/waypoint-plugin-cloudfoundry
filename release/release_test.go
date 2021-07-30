@@ -33,7 +33,7 @@ func TestRelease(t *testing.T) {
 
 	ui := terminal.ConsoleUI(context.Background())
 
-	r := Manager{}
+	r := Releaser{}
 	r.config = Config{
 		Domain:           os.Getenv("CF_DOMAIN"),
 		Hostname:         os.Getenv("CF_HOSTNAME"),
@@ -49,7 +49,7 @@ func TestRelease(t *testing.T) {
 		Name:             os.Getenv("CF_APP_NAME"),
 	}
 
-	release, err := r.release(
+	release, err := r.Release(
 		context.Background(),
 		logger,
 		ui,

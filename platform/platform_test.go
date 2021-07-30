@@ -29,7 +29,7 @@ func TestPlatformGetOrgByName(t *testing.T) {
 		return
 	}
 
-	org, err := p.getOrganizationByName(p.config.Organisation, &state)
+	org, err := state.client.GetOrganization(p.config.Organisation)
 	if err != nil {
 		t.Error(err)
 	}
@@ -72,7 +72,7 @@ func TestPlatformGetSpaceByName(t *testing.T) {
 		Name: p.config.Organisation,
 	}
 
-	space, err := p.getSpaceByName(p.config.Space, &org, &state)
+	space, err := state.client.GetSpaceByName(p.config.Space, org.GUID)
 	if err != nil {
 		t.Error(err)
 	}
