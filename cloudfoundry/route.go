@@ -80,3 +80,15 @@ func (c *Client) CreateRoute(route resources.Route) (resources.Route, error) {
 	c.listWarnings(warns)
 	return route, err
 }
+
+func (c *Client) DeleteRoute(guid string) (ccv3.JobURL, error) {
+	jobURL, warns, err := c.client.DeleteRoute(guid)
+	c.listWarnings(warns)
+	return jobURL, err
+}
+
+func (c *Client) GetApplicationRoutes(guid string) ([]resources.Route, error) {
+	routes, warns, err := c.client.GetApplicationRoutes(guid)
+	c.listWarnings(warns)
+	return routes, err
+}

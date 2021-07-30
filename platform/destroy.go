@@ -3,8 +3,9 @@ package platform
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/go-hclog"
+	"github.com/swisscom/waypoint-plugin-cloudfoundry/cloudfoundry"
 
-	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
 	"github.com/hashicorp/waypoint-plugin-sdk/component"
 	"github.com/hashicorp/waypoint-plugin-sdk/terminal"
 )
@@ -41,20 +42,26 @@ func (p *Platform) DestroyFunc() interface{} {
 //
 // If an error is returned, Waypoint stops the execution flow and
 // returns an error to the user.
-func (p *Platform) destroy(ctx context.Context, ui terminal.UI, deployment *Deployment, source *component.Source) error {
+func (p *Platform) destroy(
+	ctx context.Context,
+	log hclog.Logger,
+	ui terminal.UI,
+	deployment *Deployment,
+	source *component.Source,
+) error {
 	appName := source.App
 	deploymentName := fmt.Sprintf("%v-%v", appName, deployment.Id)
 
 	sg := ui.StepGroup()
 	step := sg.Add("Connecting to Cloud Foundry")
 
-	client, err := GetEnvClient()
+	client, err := cloudfoundry.New(log)
 	if err != nil {
 		step.Abort()
 		return fmt.Errorf("unable to create Cloud Foundry client: %v", err)
 	}
 
-	step.Update(fmt.Sprintf("Connecting to Cloud Foundry at %s", client.CloudControllerURL))
+	step.Update(fmt.Sprintf("Connecting to Cloud Foundry at %s", client.CloudControllerURL()))
 	step.Done()
 
 	orgGuid := deployment.OrganisationGUID
@@ -62,16 +69,7 @@ func (p *Platform) destroy(ctx context.Context, ui terminal.UI, deployment *Depl
 
 	step = sg.Add(fmt.Sprintf("Getting app info for %v", deploymentName))
 
-	apps, _, err := client.GetApplications(ccv3.Query{
-		Key:    ccv3.OrganizationGUIDFilter,
-		Values: []string{orgGuid},
-	}, ccv3.Query{
-		Key:    ccv3.SpaceGUIDFilter,
-		Values: []string{spaceGuid},
-	}, ccv3.Query{
-		Key:    ccv3.NameFilter,
-		Values: []string{deploymentName},
-	})
+	apps, err := client.GetApplications(orgGuid, spaceGuid, deploymentName)
 	if err != nil {
 		step.Abort()
 		return fmt.Errorf("failed to get app info: %v", err)
@@ -85,7 +83,7 @@ func (p *Platform) destroy(ctx context.Context, ui terminal.UI, deployment *Depl
 
 	stepDescription := fmt.Sprintf("Deleting app routes for %v", deploymentName)
 	step = sg.Add(stepDescription)
-	routes, _, err := client.GetApplicationRoutes(app.GUID)
+	routes, err := client.GetApplicationRoutes(app.GUID)
 	if err != nil {
 		step.Abort()
 		return fmt.Errorf("failed to get app routes: %v", err)
@@ -93,7 +91,7 @@ func (p *Platform) destroy(ctx context.Context, ui terminal.UI, deployment *Depl
 	for _, route := range routes {
 		// only delete if it's the automatically created deployment route
 		if route.Host == deploymentName {
-			_, _, err = client.DeleteRoute(route.GUID)
+			_, err = client.DeleteRoute(route.GUID)
 			if err != nil {
 				step.Update(fmt.Sprintf("%v [failed to delete route]", stepDescription))
 			}
@@ -102,7 +100,7 @@ func (p *Platform) destroy(ctx context.Context, ui terminal.UI, deployment *Depl
 	step.Done()
 
 	step = sg.Add(fmt.Sprintf("Deleting app %v", app.Name))
-	_, _, err = client.DeleteApplication(app.GUID)
+	_, err = client.DeleteApplication(app.GUID)
 	if err != nil {
 		step.Abort()
 		return fmt.Errorf("failed to delete app: %v", err)

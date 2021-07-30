@@ -346,7 +346,7 @@ func (p *Platform) connectCloudFoundry(state *DeploymentState) error {
 
 	state.client = client
 
-	step.Update(fmt.Sprintf("Connecting to Cloud Foundry at %s", client.CloudControllerURL))
+	step.Update(fmt.Sprintf("Connecting to Cloud Foundry at %s", client.CloudControllerURL()))
 	step.Done()
 	return nil
 }
