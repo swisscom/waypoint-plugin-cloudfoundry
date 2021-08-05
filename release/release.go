@@ -180,12 +180,12 @@ func (r *Releaser) listWarnings(warn ccv3.Warnings) {
 	}
 }
 
-type ReleaseState struct {
+type State struct {
 	sg     *terminal.StepGroup
 	client *cloudfoundry.Client
 }
 
-func (r *Releaser) connectCloudFoundry(state *ReleaseState) error {
+func (r *Releaser) connectCloudFoundry(state *State) error {
 	step := (*state.sg).Add("Connecting to Cloud Foundry")
 	client, err := cloudfoundry.New(r.log)
 	if err != nil {
@@ -218,7 +218,7 @@ func (r *Releaser) Status(
 	step := sg.Add("Gathering health report for Cloud Foundry platform...")
 
 	// Status of the Platform
-	state := ReleaseState{}
+	state := State{}
 	state.sg = &sg
 	err := r.connectCloudFoundry(&state)
 	defer step.Abort()
