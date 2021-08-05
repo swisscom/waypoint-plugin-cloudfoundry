@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/hashicorp/go-hclog v0.16.1
 	github.com/hashicorp/waypoint v0.3.2
-	github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210608130902-0f906e8dad0b
+	github.com/hashicorp/waypoint-plugin-sdk v0.0.0-20210714195507-d64bfe0a3ffa
 	github.com/stretchr/testify v1.6.1
 	google.golang.org/protobuf v1.26.0
 	k8s.io/apimachinery v0.19.4

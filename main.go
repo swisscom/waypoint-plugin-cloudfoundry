@@ -17,6 +17,6 @@ func main() {
 		// &builder.Builder{},
 		// &registry.Registry{},
 		&platform.Platform{},
-		&release.ReleaseManager{},
+		&release.Releaser{},
 	))
 }

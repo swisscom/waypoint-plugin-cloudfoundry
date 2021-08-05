@@ -7,8 +7,8 @@ import (
 )
 
 // DestroyFunc implements the Destroyer interface
-func (rm *ReleaseManager) DestroyFunc() interface{} {
-	return rm.destroy
+func (r *Releaser) DestroyFunc() interface{} {
+	return r.destroy
 }
 
 // A DestroyFunc does not have a strict signature, you can define the parameters
@@ -38,6 +38,6 @@ func (rm *ReleaseManager) DestroyFunc() interface{} {
 //
 // If an error is returned, Waypoint stops the execution flow and
 // returns an error to the user.
-func (rm *ReleaseManager) destroy(ctx context.Context, ui terminal.UI, release *Release) error {
+func (r *Releaser) destroy(ctx context.Context, ui terminal.UI, release *Release) error {
 	return nil
 }

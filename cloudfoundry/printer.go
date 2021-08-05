@@ -1,4 +1,4 @@
-package platform
+package cloudfoundry
 
 import (
 	"code.cloudfoundry.org/cli/cf/terminal"
