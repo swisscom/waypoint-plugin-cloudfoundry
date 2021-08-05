@@ -9,7 +9,7 @@ import (
 func (c *Client) GetRoute(guid string) (route resources.Route, err error) {
 	routes, warns, err := c.client.GetRoutes(
 		ccv3.Query{
-			Key: ccv3.RouteGUIDFilter,
+			Key: ccv3.GUIDFilter,
 			Values: []string{guid},
 		},
 	)

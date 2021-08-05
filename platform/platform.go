@@ -92,9 +92,10 @@ func (p *Platform) Status(
 	}
 
 	// Get processes by app
+	theResult, err := state.client.GetHealthByGUID(deployment.AppGUID)
 
 	step.Done()
-	return &result, nil
+	return theResult, nil
 }
 
 // Config implements Configurable

@@ -1,16 +1,16 @@
 package release
 
 import (
+	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
 	"context"
 	"fmt"
 	"github.com/hashicorp/go-hclog"
-	proto "github.com/hashicorp/waypoint-plugin-sdk/proto/gen"
-	"github.com/swisscom/waypoint-plugin-cloudfoundry/cloudfoundry"
-
-	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
 	"github.com/hashicorp/waypoint-plugin-sdk/component"
+	proto "github.com/hashicorp/waypoint-plugin-sdk/proto/gen"
 	"github.com/hashicorp/waypoint-plugin-sdk/terminal"
+	"github.com/swisscom/waypoint-plugin-cloudfoundry/cloudfoundry"
 	"github.com/swisscom/waypoint-plugin-cloudfoundry/platform"
+	"github.com/swisscom/waypoint-plugin-cloudfoundry/utils"
 )
 
 type Config struct {
@@ -21,7 +21,7 @@ type Config struct {
 
 type Releaser struct {
 	config Config
-	log hclog.Logger
+	log    hclog.Logger
 }
 
 // Config Implement Configurable
@@ -102,7 +102,6 @@ func (r *Releaser) Release(
 	}
 	domain := domains[0]
 
-
 	// Map original route, if not empty
 	if hostname != "" {
 		route, err := client.UpsertRoute(hostname, domain, deployment.SpaceGUID)
@@ -131,7 +130,6 @@ func (r *Releaser) Release(
 		}
 		step.Done()
 	}
-
 
 	step = sg.Add("mapping additional routes (if available)")
 	for _, additionalRoute := range r.config.AdditionalRoutes {
@@ -170,9 +168,6 @@ func (r *Releaser) Release(
 		step.Done()
 	}
 	step.Done()
-
-
-
 	return &release, nil
 }
 
@@ -184,50 +179,84 @@ func (r *Releaser) listWarnings(warn ccv3.Warnings) {
 	}
 }
 
+type ReleaseState struct {
+	sg     *terminal.StepGroup
+	client *cloudfoundry.Client
+}
+
+func (r *Releaser) connectCloudFoundry(state *ReleaseState) error {
+	step := (*state.sg).Add("Connecting to Cloud Foundry")
+	client, err := cloudfoundry.New(r.log)
+	if err != nil {
+		step.Abort()
+		return fmt.Errorf("unable to create Cloud Foundry client: %v", err)
+	}
+
+	state.client = client
+
+	step.Update(fmt.Sprintf("Connecting to Cloud Foundry at %s", client.CloudControllerURL()))
+	step.Done()
+	return nil
+}
+
 func (r *Releaser) Status(
 	ctx context.Context,
 	log hclog.Logger,
 	release *Release,
 	ui terminal.UI,
 ) (*proto.StatusReport, error) {
+	var result proto.StatusReport
+	result.External = true
+
 	if release.RouteGuid == "" {
 		return nil, fmt.Errorf("route GUID cannot be empty")
 	}
 	r.log = log
 
 	sg := ui.StepGroup()
-	step := sg.Add("getting health for release")
+	step := sg.Add("Gathering health report for Cloud Foundry platform...")
+
+	// Status of the Platform
+	state := ReleaseState{}
+	state.sg = &sg
+	err := r.connectCloudFoundry(&state)
 	defer step.Abort()
 
-	client, err := cloudfoundry.New(log)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get Cloud Foundry client: %v", err)
-	}
-
 	routeGuid := release.RouteGuid
-
-	route, err := client.GetRoute(routeGuid)
+	route, err := state.client.GetRoute(routeGuid)
 	if err != nil {
 		return nil,
-		fmt.Errorf(
-			"unable to get routes for route GUID %s: %v",
-			routeGuid,
-			err,
-		)
+			fmt.Errorf(
+				"unable to get routes for route GUID %s: %v",
+				routeGuid,
+				err,
+			)
 	}
 	destinations := route.Destinations
 
 	if len(destinations) == 0 {
 		// No destinations = 404 !
-
+		result.HealthMessage = "No destinations mapped to route"
+		result.Health = proto.StatusReport_DOWN
+		return &result, nil
 	}
 
-	/*(for _, dest := range destinations {
-		dest.
-	}*/
+	var healthReports []*proto.StatusReport
+
+	for _, dest := range destinations {
+		healthStatus, err := state.client.GetHealthByGUID(dest.App.GUID)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"unable to get health for app %v: %v",
+				dest.App.GUID,
+				err,
+			)
+		}
+		healthReports = append(healthReports, healthStatus)
+	}
 
 	step.Done()
-	return nil, nil
+	return utils.HealthSummary(healthReports...), nil
 }
 
 func (r *Release) URL() string { return r.Url }
