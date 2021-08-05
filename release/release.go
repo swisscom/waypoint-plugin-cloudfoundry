@@ -118,6 +118,7 @@ func (r *Releaser) Release(
 		}
 		step.Done()
 		release.Url = fmt.Sprintf("%v://%v", route.Protocol, route.URL)
+		release.RouteGuid = route.GUID
 
 		step = sg.Add("unmapping other applications")
 		// Unmap all others applications
