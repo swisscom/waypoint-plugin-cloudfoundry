@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-hclog"
 	proto "github.com/hashicorp/waypoint-plugin-sdk/proto/gen"
+	"github.com/swisscom/waypoint-plugin-cloudfoundry/cloudfoundry"
 	"github.com/swisscom/waypoint-plugin-cloudfoundry/utils"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"os"
@@ -91,70 +92,10 @@ func (p *Platform) Status(
 	}
 
 	// Get processes by app
-	processes, warn, err := state.client.GetApplicationProcesses(deployment.AppGUID)
-	if err != nil {
-		ui.Output("Error getting application processes: %s",
-			err,
-			terminal.WithErrorStyle(),
-		)
-		return nil, err
-	}
-
-	p.listWarnings(warn)
-
-	processInstancesCount := 0
-	statusMap := map[constant.ProcessInstanceState]int{}
-
-	for _, proc := range processes {
-		// Get Health Check result
-		pInstances, warn, err := state.client.GetProcessInstances(proc.GUID)
-		if err != nil {
-			ui.Output("Error getting process instance for %s (part of %s): %s",
-				proc.GUID,
-				deployment.AppGUID,
-				err,
-				terminal.WithErrorStyle(),
-			)
-			return nil, err
-		}
-		p.listWarnings(warn)
-
-		for _, pi := range pInstances {
-			statusMap[pi.State]++
-			processInstancesCount++
-		}
-	}
-
-	if statusMap[constant.ProcessInstanceRunning] == processInstancesCount {
-		result.Health = proto.StatusReport_READY
-		result.HealthMessage = "all processes are reporting ready"
-	} else if statusMap[constant.ProcessInstanceCrashed] == processInstancesCount {
-		result.Health = proto.StatusReport_DOWN
-		result.HealthMessage = "all processes are crashed"
-	} else if statusMap[constant.ProcessInstanceStarting] == processInstancesCount {
-		result.Health = proto.StatusReport_ALIVE
-		result.HealthMessage = "all processes are starting"
-	} else if statusMap[constant.ProcessInstanceDown] == processInstancesCount {
-		result.Health = proto.StatusReport_DOWN
-		result.HealthMessage = "all processes are reporting down"
-	} else {
-		result.Health = proto.StatusReport_PARTIAL
-		result.HealthMessage = fmt.Sprintf(
-			"all processes are reporting mixed status: %v",
-			statusMap,
-		)
-	}
+	theResult, err := state.client.GetHealthByGUID(deployment.AppGUID)
 
 	step.Done()
-	return &result, nil
-}
-
-func (p *Platform) listWarnings(warn ccv3.Warnings) {
-	if len(warn) > 0 {
-		for _, w := range warn {
-			p.log.Warn("Cloud Foundry warning", "warning", w)
-		}
-	}
+	return theResult, nil
 }
 
 // Config implements Configurable
@@ -184,7 +125,7 @@ type DeploymentState struct {
 	shouldCleanup bool
 
 	sg          *terminal.StepGroup
-	client      *ccv3.Client
+	client      *cloudfoundry.Client
 	space       *resources.Space
 	org         *resources.Organization
 	img         *docker.Image
@@ -256,7 +197,7 @@ func (p *Platform) Deploy(
 		return nil, err
 	}
 
-	org, space, err := selectOrgAndSpace(p, state.client, sg)
+	org, space, err := state.client.SelectOrgAndSpace(p.config.Organisation, p.config.Space)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +284,7 @@ func (p *Platform) createApp(state *DeploymentState) (*resources.Application, er
 		State:         constant.ApplicationStarted,
 	}
 
-	app, _, err := state.client.CreateApplication(appCreateRequest)
+	app, _, err := state.client.CfClient().CreateApplication(appCreateRequest)
 	if err != nil {
 		step.Abort()
 		return nil, fmt.Errorf("failed to create app: %v", err)
@@ -387,12 +328,9 @@ func (p *Platform) createPackage(state DeploymentState) (*resources.Package, err
 		}
 	}
 
-	cfPackage, warnings, err := state.client.CreatePackage(dockerPackage)
+	cfPackage, err := state.client.CreatePackage(dockerPackage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create package: %v", err)
-	}
-	if len(warnings) > 0 {
-		p.log.Warn("warnings: %v", warnings)
 	}
 	step.Done()
 
@@ -401,7 +339,7 @@ func (p *Platform) createPackage(state DeploymentState) (*resources.Package, err
 
 func (p *Platform) connectCloudFoundry(state *DeploymentState) error {
 	step := (*state.sg).Add("Connecting to Cloud Foundry")
-	client, err := GetEnvClient()
+	client, err := cloudfoundry.New(p.log)
 	if err != nil {
 		step.Abort()
 		return fmt.Errorf("unable to create Cloud Foundry client: %v", err)
@@ -409,7 +347,7 @@ func (p *Platform) connectCloudFoundry(state *DeploymentState) error {
 
 	state.client = client
 
-	step.Update(fmt.Sprintf("Connecting to Cloud Foundry at %s", client.CloudControllerURL))
+	step.Update(fmt.Sprintf("Connecting to Cloud Foundry at %s", client.CloudControllerURL()))
 	step.Done()
 	return nil
 }
@@ -417,7 +355,7 @@ func (p *Platform) connectCloudFoundry(state *DeploymentState) error {
 func (p *Platform) configureQuota(state DeploymentState) error {
 	if state.quotaParams.memoryMb != 0 || state.quotaParams.diskMb != 0 || state.quotaParams.instances > 1 {
 		step := (*state.sg).Add("Configuring quota...")
-		processes, _, err := state.client.GetApplicationProcesses(state.app.GUID)
+		processes, err := state.client.GetApplicationProcesses(state.app.GUID)
 		if err != nil {
 			step.Abort()
 			return fmt.Errorf("failed to get application processes: %v", err)
@@ -451,7 +389,7 @@ func (p *Platform) configureQuota(state DeploymentState) error {
 			}
 		}
 
-		_, _, err = state.client.CreateApplicationProcessScale(state.app.GUID, newP)
+		_, err = state.client.CreateApplicationProcessScale(state.app.GUID, newP)
 		if err != nil {
 			step.Abort()
 			return fmt.Errorf("unable to scale application: %v", err)
@@ -504,17 +442,11 @@ func (p *Platform) validateQuota(state *DeploymentState) error {
 func (p *Platform) searchApp(state *DeploymentState) error {
 	step := (*state.sg).Add(fmt.Sprintf("Searching app: %s", state.deployment.Name))
 	var err error
-	state.apps, _, err = state.client.GetApplications(ccv3.Query{
-		Key:    ccv3.OrganizationGUIDFilter,
-		Values: []string{state.deployment.OrganisationGUID},
-	}, ccv3.Query{
-		Key:    ccv3.SpaceGUIDFilter,
-		Values: []string{state.deployment.SpaceGUID},
-	}, ccv3.Query{
-		Key:    ccv3.NameFilter,
-		Values: []string{state.deployment.Name},
-	})
-
+	state.apps, err = state.client.GetApplications(
+		state.deployment.OrganisationGUID,
+		state.deployment.SpaceGUID,
+		state.deployment.Name,
+	)
 	state.appExists = true
 	if err != nil {
 		step.Abort()
@@ -550,7 +482,7 @@ func (p *Platform) deleteApp(state *DeploymentState, idx int) error {
 			state.deployment.Name),
 		)
 
-		_, _, err := state.client.DeleteApplication(app.GUID)
+		_, err := state.client.DeleteApplication(app.GUID)
 		if err != nil {
 			step.Abort()
 			return fmt.Errorf("failed to delete app: %v", err)
@@ -566,9 +498,7 @@ func (p *Platform) createBuild(state *DeploymentState) error {
 		fmt.Sprintf("Creating a new build for the created package of image %v",
 			state.cfPackage.DockerImage))
 
-	cfBuild, warnings, err := state.client.CreateBuild(resources.Build{
-		PackageGUID: state.cfPackage.GUID,
-	})
+	cfBuild, err := state.client.CreateBuild(state.cfPackage.GUID)
 	if err != nil {
 		step.Abort()
 		return fmt.Errorf("failed to create build: %v", err)
@@ -577,10 +507,6 @@ func (p *Platform) createBuild(state *DeploymentState) error {
 	state.cfBuild = &cfBuild
 
 	p.log.Debug("build created", "cfbuild", fmt.Sprintf("%+v", cfBuild))
-
-	if len(warnings) > 0 {
-		p.log.Warn("warnings: %v", warnings)
-	}
 
 	// Wait for droplet to become ready
 	for {
@@ -592,7 +518,7 @@ func (p *Platform) createBuild(state *DeploymentState) error {
 		}
 
 		time.Sleep(500 * time.Millisecond)
-		build, _, _ := state.client.GetBuild(state.cfBuild.GUID)
+		build, _ := state.client.GetBuild(state.cfBuild.GUID)
 		p.log.Debug("build update", "build", fmt.Sprintf("%+v", build))
 		state.cfBuild = &build
 		step.Update(
@@ -608,7 +534,7 @@ func (p *Platform) createBuild(state *DeploymentState) error {
 func (p *Platform) createDeployment(state *DeploymentState) error {
 	// Create deployment
 	step := (*state.sg).Add("Creating a new deployment")
-	_, _, err := state.client.CreateApplicationDeployment(state.deployment.AppGUID, state.cfBuild.DropletGUID)
+	_, err := state.client.CreateApplicationDeployment(state.deployment.AppGUID, state.cfBuild.DropletGUID)
 	if err != nil {
 		step.Abort()
 		return fmt.Errorf("failed to create deployment: %v", err)
@@ -620,10 +546,7 @@ func (p *Platform) createDeployment(state *DeploymentState) error {
 func (p *Platform) bindRoute(state *DeploymentState) error {
 	routeUrl := fmt.Sprintf("%v.%v", state.deployment.Name, p.config.Domain)
 	step := (*state.sg).Add(fmt.Sprintf("Binding route %v to application", routeUrl))
-	domains, _, err := state.client.GetDomains(ccv3.Query{
-		Key:    ccv3.NameFilter,
-		Values: []string{p.config.Domain},
-	})
+	domains, err := state.client.GetDomains(p.config.Domain)
 	if err != nil || len(domains) == 0 {
 		step.Abort()
 		return fmt.Errorf("failed to get specified domain: %v", err)
@@ -634,7 +557,7 @@ func (p *Platform) bindRoute(state *DeploymentState) error {
 
 	}
 
-	route, _, err := state.client.CreateRoute(resources.Route{
+	route, err := state.client.CreateRoute(resources.Route{
 		DomainGUID: domain.GUID,
 		SpaceGUID:  state.deployment.SpaceGUID,
 		Host:       state.deployment.Name,
@@ -653,7 +576,7 @@ func (p *Platform) bindRoute(state *DeploymentState) error {
 	state.route = &route
 
 	// Also map
-	_, err = state.client.MapRoute(route.GUID, state.deployment.AppGUID)
+	err = state.client.MapRoute(route.GUID, state.deployment.AppGUID)
 	if err != nil {
 		step.Abort()
 		return fmt.Errorf("failed to map route: %v", err)
@@ -686,7 +609,7 @@ func (p *Platform) setEnvironmentVariables(state *DeploymentState) error {
 			step.Done()
 		}
 
-		_, _, err := state.client.UpdateApplicationEnvironmentVariables(state.app.GUID, envVars)
+		_, err := state.client.UpdateApplicationEnvironmentVariables(state.app.GUID, envVars)
 		if err != nil {
 			step.Abort()
 			return fmt.Errorf("unable to set environment variables: %v", err)
@@ -700,7 +623,7 @@ func (p *Platform) bindServices(state *DeploymentState) error {
 	if len(p.config.ServiceBindings) > 0 {
 		step := (*state.sg).Add("Binding services")
 		// get ServiceBind Repository
-		sbRepo, err := GetServiceBindRepository()
+		sbRepo, err := cloudfoundry.GetServiceBindRepository()
 		if err != nil {
 			step.Abort()
 			return fmt.Errorf("unable to get ServiceBind Repository: %v", err)
@@ -708,36 +631,20 @@ func (p *Platform) bindServices(state *DeploymentState) error {
 
 		for _, serviceName := range p.config.ServiceBindings {
 			// find service
-			serviceInstances, _, _, err := state.client.GetServiceInstances(ccv3.Query{
-				Key:    ccv3.OrganizationGUIDFilter,
-				Values: []string{state.deployment.OrganisationGUID},
-			}, ccv3.Query{
-				Key:    ccv3.SpaceGUIDFilter,
-				Values: []string{state.deployment.SpaceGUID},
-			}, ccv3.Query{
-				Key:    ccv3.NameFilter,
-				Values: []string{serviceName},
-			})
+			serviceInstance, err := state.client.GetServiceInstances(state.deployment.SpaceGUID, serviceName)
 			if err != nil {
 				step.Abort()
 				return fmt.Errorf("unable to get service %s: %v", serviceName, err)
 			}
 
-			if len(serviceInstances) != 1 {
-				step.Abort()
-				return fmt.Errorf("found %d service instances with the name \"%s\"",
-					len(serviceInstances),
-					serviceName)
-			}
-
 			// bind service
 			p.log.Debug("create service binding",
-				"serviceInstance", serviceInstances[0],
+				"serviceInstance", serviceInstance,
 				"app", state.app,
-				"serviceInstanceGUID", serviceInstances[0].GUID,
+				"serviceInstanceGUID", serviceInstance.GUID,
 				"appGUID", state.app.GUID,
 			)
-			err = sbRepo.Create(serviceInstances[0].GUID, state.app.GUID, map[string]interface{}{})
+			err = sbRepo.Create(serviceInstance.GUID, state.app.GUID, map[string]interface{}{})
 			if err != nil {
 				step.Abort()
 				return fmt.Errorf("unable to bind service %s to app: %v", serviceName, err)
@@ -755,19 +662,13 @@ func (p *Platform) cleanupResourcesOnFail(state *DeploymentState) {
 
 	// Clean up resources that were created but failed
 	if state.deployment != nil {
-		_, w, err := state.client.DeleteApplication(state.deployment.AppGUID)
+		_, err := state.client.DeleteApplication(state.deployment.AppGUID)
 		if err != nil {
 			p.log.Error("unable to delete application",
 				"guid", state.deployment.AppGUID,
 				"error", err,
 			)
 			return
-		}
-
-		if w != nil {
-			for _, warning := range w {
-				p.log.Warn("delete application warning", "warning", warning)
-			}
 		}
 	}
 }
@@ -777,21 +678,12 @@ func (p *Platform) waitProcess(state *DeploymentState) error {
 		return fmt.Errorf("unable to wait for a nil deployment")
 	}
 
-	applicationProcesses, warn, err := state.client.GetApplicationProcesses(state.deployment.AppGUID)
+	applicationProcesses, err := state.client.GetApplicationProcesses(state.deployment.AppGUID)
 	if err != nil {
 		return fmt.Errorf("unable to get application processes: %v", err)
 	}
 
-	if len(warn) > 0 {
-		p.log.Warn(
-			fmt.Sprintf("GetApplicationProcesses returned %d warnings", len(warn)),
-			"warnings",
-			warn,
-		)
-	}
-
 	startTime := time.Now()
-
 	for {
 		processes := map[resources.Process][]ccv3.ProcessInstance{}
 		if time.Now().After(startTime.Add(p.config.deploymentTimeout)) {
@@ -805,16 +697,9 @@ func (p *Platform) waitProcess(state *DeploymentState) error {
 		}
 
 		for _, proc := range applicationProcesses {
-			procInstances, warn, err := state.client.GetProcessInstances(proc.GUID)
+			procInstances, err := state.client.GetProcessInstances(proc.GUID)
 			if err != nil {
 				return fmt.Errorf("unable to get process instances for process %v", proc)
-			}
-			if len(warn) > 0 {
-				p.log.Warn(
-					fmt.Sprintf("GetProcessInstances returned %d warnings", len(warn)),
-					"warnings",
-					warn,
-				)
 			}
 			processes[proc] = procInstances
 		}
@@ -871,51 +756,11 @@ func (p *Platform) parseTimeout() error {
 }
 
 func (p *Platform) getOrganizationByName(org string, state *DeploymentState) (*resources.Organization, error) {
-	organizations, warnings, err := state.client.GetOrganizations(ccv3.Query{
-		Key:    ccv3.NameFilter,
-		Values: []string{p.config.Organisation},
-	})
+	organization, err := state.client.GetOrganization(p.config.Organisation)
 	if err != nil {
 		return nil, err
 	}
-	p.listWarnings(warnings)
-	if len(organizations) == 0 {
-		return nil, fmt.Errorf("organization %s not found", org)
-	}
-	if len(organizations) > 1 {
-		return nil, fmt.Errorf("two organizations with the same name found")
-	}
-
-	return &organizations[0], nil
-}
-
-func (p *Platform) getSpaceByName(space string, org *resources.Organization, state *DeploymentState) (*resources.Space, error) {
-	spaces, _, warnings, err := state.client.GetSpaces(
-		ccv3.Query{
-			Key:    ccv3.OrganizationGUIDFilter,
-			Values: []string{org.GUID},
-		},
-		ccv3.Query{
-			Key:    ccv3.NameFilter,
-			Values: []string{space},
-		},
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	p.listWarnings(warnings)
-
-	if len(spaces) == 0 {
-		return nil, fmt.Errorf("unable to find space %s", space)
-	}
-
-	if len(spaces) > 1 {
-		return nil, fmt.Errorf("getSpaceByName returned more than one space")
-	}
-
-	return &spaces[0], nil
+	return &organization, nil
 }
 
 func parseQuantity(entry string) (uint64, error) {
