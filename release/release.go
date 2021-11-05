@@ -1,9 +1,10 @@
 package release
 
 import (
-	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
 	"context"
 	"fmt"
+
+	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/waypoint-plugin-sdk/component"
 	proto "github.com/hashicorp/waypoint-plugin-sdk/proto/gen"
@@ -17,6 +18,7 @@ type Config struct {
 	Domain           string   `hcl:"domain"`
 	Hostname         string   `hcl:"hostname,optional"`
 	AdditionalRoutes []string `hcl:"additional_routes,optional"`
+	StopOldInstances bool     `hcl:"stop_old_instances,optional"`
 }
 
 type Releaser struct {
