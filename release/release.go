@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
+	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3/constant"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/waypoint-plugin-sdk/component"
 	proto "github.com/hashicorp/waypoint-plugin-sdk/proto/gen"
@@ -18,7 +19,7 @@ type Config struct {
 	Domain           string   `hcl:"domain"`
 	Hostname         string   `hcl:"hostname,optional"`
 	AdditionalRoutes []string `hcl:"additional_routes,optional"`
-	StopOldInstances bool     `hcl:"stop_old_instances,optional"`
+	StopOldInstances bool     `hcl:"stopOldInstances,optional"`
 }
 
 type Releaser struct {
@@ -171,6 +172,35 @@ func (r *Releaser) Release(
 		step.Done()
 	}
 	step.Done()
+
+	// Stop old instances, if configured in hcl file
+	if r.config.StopOldInstances {
+		step = sg.Add("stopping old instances")
+
+		// We use label automatically created by deployment, to find apps that should be stopped.
+		labels := []string{fmt.Sprintf("appName=%v", src.App)}
+		apps, err := client.GetApplicationsByLabels(orgGuid, spaceGuid, labels)
+		if err != nil {
+			step.Abort()
+			return nil, fmt.Errorf("unable to get old instances: %v", err)
+		}
+
+		for _, app := range apps {
+			// We only stop old (not the one we just deployed) apps that are not already stopped
+			if app.Name != deployment.Name && app.State != constant.ApplicationStopped {
+				step := sg.Add("stopping app: %s", app.Name)
+				_, err := client.StopApplication(app.GUID)
+				if err != nil {
+					return nil, fmt.Errorf("unalble to stop old instance: %v", err)
+				}
+				step.Update("app: %s stopped", app.Name)
+				step.Done()
+			}
+		}
+
+		step.Done()
+	}
+
 	return &release, nil
 }
 
