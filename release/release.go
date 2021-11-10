@@ -187,7 +187,7 @@ func (r *Releaser) Release(
 
 		for _, app := range apps {
 			// We only stop old (not the one we just deployed) apps that are not already stopped
-			if app.Name != deployment.Name && app.State != constant.ApplicationStopped {
+			if app.GUID != deployment.AppGUID && app.State != constant.ApplicationStopped {
 				step := sg.Add("stopping app: %s", app.Name)
 				_, err := client.StopApplication(app.GUID)
 				if err != nil {
