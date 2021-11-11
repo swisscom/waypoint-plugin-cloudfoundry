@@ -18,7 +18,15 @@ deploy {
       # Make sure to create and rename this file, if needed
       # it should contain username:password as base64 encoded string
       docker_encoded_auth = file(abspath("./docker_encoded_credentials.secret"))
-   }
+
+      # Health-check can be configured. Type is required, endpoint is required with type==http, 
+      # other fields are optional.
+      # healthCheck {
+      #   type = "http"
+      #   endpoint = "/health"
+      #   timeout = 60
+      #   invocationTimeout = 60
+      # }
 }
 ```
 
