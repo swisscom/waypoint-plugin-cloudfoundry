@@ -41,7 +41,7 @@ type QuotaConfig struct {
 type HealthCheckConfig struct {
 	Type              string `hcl:"type"`
 	Endpoint          string `hcl:"endpoint,optional"`
-	InvocationTimeout int64  `hcl:"invocationTimeout,optional"`
+	InvocationTimeout int64  `hcl:"invocation_timeout,optional"`
 	Timeout           int64  `hcl:"timeout,optional"`
 }
 
@@ -57,8 +57,8 @@ type Config struct {
 	Quota                    *QuotaConfig       `hcl:"quota,block"`
 	HealthCheck              *HealthCheckConfig `hcl:"health_check,block"`
 	Env                      map[string]string  `hcl:"env,optional"`
-	EnvFromFile              string             `hcl:"envFromFile,optional"`
-	ServiceBindings          []string           `hcl:"serviceBindings,optional"`
+	EnvFromFile              string             `hcl:"env_from_file,optional"`
+	ServiceBindings          []string           `hcl:"service_bindings,optional"`
 	DeploymentTimeoutSeconds string             `hcl:"deployment_timeout_seconds,optional"`
 	deploymentTimeout        time.Duration
 }

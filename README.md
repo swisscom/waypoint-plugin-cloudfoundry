@@ -24,7 +24,7 @@ deploy {
          type = "http" # required
          endpoint = "/health" # required if type = "http"
          timeout = 60
-         invocationTimeout = 60
+         invocation_timeout = 60
       }
 }
 ```
