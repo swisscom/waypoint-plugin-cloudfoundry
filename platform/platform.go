@@ -55,7 +55,7 @@ type Config struct {
 	Docker                   *DockerConfig      `hcl:"docker,block"`
 	Domain                   string             `hcl:"domain"`
 	Quota                    *QuotaConfig       `hcl:"quota,block"`
-	HealthCheck              *HealthCheckConfig `hcl:"healthCheck,block"`
+	HealthCheck              *HealthCheckConfig `hcl:"health_check,block"`
 	Env                      map[string]string  `hcl:"env,optional"`
 	EnvFromFile              string             `hcl:"envFromFile,optional"`
 	ServiceBindings          []string           `hcl:"serviceBindings,optional"`

@@ -20,7 +20,7 @@ deploy {
       docker_encoded_auth = file(abspath("./docker_encoded_credentials.secret"))
 
       # Defines an Health Check configuration
-      healthCheck {
+      health_check {
          type = "http" # required
          endpoint = "/health" # required if type = "http"
          timeout = 60
