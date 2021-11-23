@@ -91,7 +91,7 @@ func TestPlatformGetSpaceByName(t *testing.T) {
 	)
 }
 
-func TestHealthCheck(t *testing.T){
+func TestHealthCheck(t *testing.T) {
 	p := Platform{
 		config: Config{
 			Organisation: os.Getenv("CF_ORG"),

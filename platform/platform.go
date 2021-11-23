@@ -442,7 +442,6 @@ func (p *Platform) configureHealthCheck(state *DeploymentState) error {
 		}
 
 		for _, process := range processes {
-
 			process.HealthCheckType = state.healthCheckParams.Type
 
 			if state.healthCheckParams.Endpoint != "" {
