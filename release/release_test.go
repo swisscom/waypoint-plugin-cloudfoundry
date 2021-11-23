@@ -19,10 +19,10 @@ func TestRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	*c.(*platform.Config) = platform.Config{
-			Organisation: os.Getenv("CF_ORG"),
-			Space:        os.Getenv("CF_SPACE"),
-			Domain:       os.Getenv("CF_DOMAIN"),
-			DeploymentTimeoutSeconds: "10s",
+		Organisation:             os.Getenv("CF_ORG"),
+		Space:                    os.Getenv("CF_SPACE"),
+		Domain:                   os.Getenv("CF_DOMAIN"),
+		DeploymentTimeoutSeconds: "10s",
 	}
 
 	logger := hclog.New(nil)
@@ -70,20 +70,20 @@ func TestStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	*c.(*platform.Config) = platform.Config{
-		Organisation: os.Getenv("CF_ORG"),
-		Space:        os.Getenv("CF_SPACE"),
-		Domain:       os.Getenv("CF_DOMAIN"),
+		Organisation:             os.Getenv("CF_ORG"),
+		Space:                    os.Getenv("CF_SPACE"),
+		Domain:                   os.Getenv("CF_DOMAIN"),
 		DeploymentTimeoutSeconds: "10s",
 	}
 
 	logger := hclog.New(nil)
 	release := Release{
-		Url:           fmt.Sprintf(
+		Url: fmt.Sprintf(
 			"https://%s.%s",
 			os.Getenv("CF_HOSTNAME"),
 			os.Getenv("CF_DOMAIN"),
 		),
-		RouteGuid:     os.Getenv("CF_ROUTE_GUID"),
+		RouteGuid: os.Getenv("CF_ROUTE_GUID"),
 	}
 
 	r := Releaser{

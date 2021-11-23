@@ -38,20 +38,28 @@ type QuotaConfig struct {
 	Instances uint64 `hcl:"instances,optional"`
 }
 
+type HealthCheckConfig struct {
+	Type              string `hcl:"type"`
+	Endpoint          string `hcl:"endpoint,optional"`
+	InvocationTimeout int64  `hcl:"invocation_timeout,optional"`
+	Timeout           int64  `hcl:"timeout,optional"`
+}
+
 type DockerConfig struct {
 	Username string `hcl:"username"`
 }
 
 type Config struct {
-	Organisation             string            `hcl:"organisation"`
-	Space                    string            `hcl:"space"`
-	Docker                   *DockerConfig     `hcl:"docker,block"`
-	Domain                   string            `hcl:"domain"`
-	Quota                    *QuotaConfig      `hcl:"quota,block"`
-	Env                      map[string]string `hcl:"env,optional"`
-	EnvFromFile              string            `hcl:"envFromFile,optional"`
-	ServiceBindings          []string          `hcl:"serviceBindings,optional"`
-	DeploymentTimeoutSeconds string            `hcl:"deployment_timeout_seconds,optional"`
+	Organisation             string             `hcl:"organisation"`
+	Space                    string             `hcl:"space"`
+	Docker                   *DockerConfig      `hcl:"docker,block"`
+	Domain                   string             `hcl:"domain"`
+	Quota                    *QuotaConfig       `hcl:"quota,block"`
+	HealthCheck              *HealthCheckConfig `hcl:"health_check,block"`
+	Env                      map[string]string  `hcl:"env,optional"`
+	EnvFromFile              string             `hcl:"env_from_file,optional"`
+	ServiceBindings          []string           `hcl:"service_bindings,optional"`
+	DeploymentTimeoutSeconds string             `hcl:"deployment_timeout_seconds,optional"`
 	deploymentTimeout        time.Duration
 }
 
@@ -125,19 +133,20 @@ type DeploymentState struct {
 	deployment    *Deployment
 	shouldCleanup bool
 
-	sg          *terminal.StepGroup
-	client      *cloudfoundry.Client
-	space       *resources.Space
-	org         *resources.Organization
-	img         *docker.Image
-	cfPackage   *resources.Package
-	quotaParams *QuotaParams
-	app         *resources.Application
-	appExists   bool
-	apps        []resources.Application
-	cfBuild     *resources.Build
-	route       *resources.Route
-	metadata    *resources.Metadata
+	sg                *terminal.StepGroup
+	client            *cloudfoundry.Client
+	space             *resources.Space
+	org               *resources.Organization
+	img               *docker.Image
+	cfPackage         *resources.Package
+	quotaParams       *QuotaParams
+	healthCheckParams *HealthCheckParams
+	app               *resources.Application
+	appExists         bool
+	apps              []resources.Application
+	cfBuild           *resources.Build
+	route             *resources.Route
+	metadata          *resources.Metadata
 }
 
 // A BuildFunc does not have a strict signature, you can define the parameters
@@ -180,6 +189,11 @@ func (p *Platform) Deploy(
 
 	// Parse quantities
 	err = p.validateQuota(&state)
+	if err != nil {
+		return nil, err
+	}
+
+	err = p.validateHealthCheck(&state)
 	if err != nil {
 		return nil, err
 	}
@@ -265,6 +279,11 @@ func (p *Platform) Deploy(
 	}
 
 	err = p.waitProcess(&state)
+	if err != nil {
+		return nil, err
+	}
+
+	err = p.configureHealthCheck(&state)
 	if err != nil {
 		return nil, err
 	}
@@ -407,10 +426,61 @@ func (p *Platform) configureQuota(state DeploymentState) error {
 	return nil
 }
 
+func (p *Platform) configureHealthCheck(state *DeploymentState) error {
+	if state.healthCheckParams != nil {
+		step := (*state.sg).Add("Configuring health check...")
+
+		processes, err := state.client.GetApplicationProcesses(state.app.GUID)
+		if err != nil {
+			step.Abort()
+			return fmt.Errorf("failed to get application processes: %v", err)
+		}
+
+		if len(processes) == 0 {
+			step.Abort()
+			return fmt.Errorf("no processes found")
+		}
+
+		for _, process := range processes {
+			process.HealthCheckType = state.healthCheckParams.Type
+
+			if state.healthCheckParams.Endpoint != "" {
+				process.HealthCheckEndpoint = state.healthCheckParams.Endpoint
+			}
+
+			if state.healthCheckParams.InvocationTimeout != 0 {
+				process.HealthCheckInvocationTimeout = state.healthCheckParams.InvocationTimeout
+			}
+
+			if state.healthCheckParams.Timeout != 0 {
+				process.HealthCheckTimeout = state.healthCheckParams.Timeout
+			}
+
+			p.log.Debug("updating process: %v", process)
+
+			_, err = state.client.UpdateApplicationProcess(process)
+			if err != nil {
+				step.Abort()
+				return fmt.Errorf("unable to configure application process: %v", err)
+			}
+		}
+
+		step.Done()
+	}
+	return nil
+}
+
 type QuotaParams struct {
 	diskMb    uint64
 	memoryMb  uint64
 	instances uint64
+}
+
+type HealthCheckParams struct {
+	Type              constant.HealthCheckType
+	Endpoint          string
+	InvocationTimeout int64
+	Timeout           int64
 }
 
 func (p *Platform) validateQuota(state *DeploymentState) error {
@@ -418,7 +488,7 @@ func (p *Platform) validateQuota(state *DeploymentState) error {
 
 	p.log.Debug("validate quota")
 
-	step := (*state.sg).Add("Validating parameters")
+	step := (*state.sg).Add("Validating quota parameters")
 	state.quotaParams = &QuotaParams{}
 	if p.config.Quota != nil {
 		p.log.Debug("quota is not nil")
@@ -443,6 +513,43 @@ func (p *Platform) validateQuota(state *DeploymentState) error {
 			p.log.Debug("quota parsed disk", "quota_parsed", state.quotaParams.diskMb)
 		}
 	}
+	step.Done()
+	return nil
+}
+
+func (p *Platform) validateHealthCheck(state *DeploymentState) error {
+	p.log.Debug("validate health check")
+
+	step := (*state.sg).Add("Validating health check parameters")
+	state.healthCheckParams = &HealthCheckParams{}
+
+	if p.config.HealthCheck != nil {
+		p.log.Debug("health check config is not nil")
+
+		state.healthCheckParams.Type = constant.HealthCheckType(p.config.HealthCheck.Type)
+
+		if state.healthCheckParams.Type == constant.HTTP && p.config.HealthCheck.Endpoint == "" {
+			step.Abort()
+			return fmt.Errorf("undefined endpoint for HTTP health check")
+		}
+		state.healthCheckParams.Endpoint = p.config.HealthCheck.Endpoint
+
+		if p.config.HealthCheck.InvocationTimeout < 0 || p.config.HealthCheck.InvocationTimeout > 180 {
+			step.Abort()
+			return fmt.Errorf("invocation timeout has to be 0-180s")
+		}
+		state.healthCheckParams.InvocationTimeout = p.config.HealthCheck.InvocationTimeout
+
+		if p.config.HealthCheck.Timeout < 0 || p.config.HealthCheck.Timeout > 180 {
+			step.Abort()
+			return fmt.Errorf("timeout has to be 0-180s")
+		}
+		state.healthCheckParams.Timeout = p.config.HealthCheck.Timeout
+
+		p.log.Debug("health check params: %v", state.healthCheckParams)
+
+	}
+
 	step.Done()
 	return nil
 }
