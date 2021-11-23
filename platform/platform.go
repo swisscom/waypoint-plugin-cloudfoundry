@@ -427,7 +427,7 @@ func (p *Platform) configureQuota(state DeploymentState) error {
 }
 
 func (p *Platform) configureHealthCheck(state *DeploymentState) error {
-	if needToConfigureHealthCheck(state) {
+	if state.healthCheckParams != nil {
 		step := (*state.sg).Add("Configuring health check...")
 
 		processes, err := state.client.GetApplicationProcesses(state.app.GUID)
@@ -468,12 +468,6 @@ func (p *Platform) configureHealthCheck(state *DeploymentState) error {
 		step.Done()
 	}
 	return nil
-}
-
-func needToConfigureHealthCheck(state *DeploymentState) bool {
-	return state.healthCheckParams != nil && (state.healthCheckParams.Endpoint != "" ||
-		state.healthCheckParams.Type != "" || state.healthCheckParams.InvocationTimeout != 0 ||
-		state.healthCheckParams.Timeout != 0)
 }
 
 type QuotaParams struct {
