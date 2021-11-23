@@ -19,14 +19,13 @@ deploy {
       # it should contain username:password as base64 encoded string
       docker_encoded_auth = file(abspath("./docker_encoded_credentials.secret"))
 
-      # Health-check can be configured. Type is required, endpoint is required with type==http, 
-      # other fields are optional.
-      # healthCheck {
-      #   type = "http"
-      #   endpoint = "/health"
-      #   timeout = 60
-      #   invocationTimeout = 60
-      # }
+      # Defines an Health Check configuration
+      healthCheck {
+         type = "http" # required
+         endpoint = "/health" # required if type = "http"
+         timeout = 60
+         invocationTimeout = 60
+      }
 }
 ```
 
@@ -71,7 +70,7 @@ The built artifacts will be output in the `./releases` folder.
 make build-docker
 
 rm -rf ./releases
-DOCKER_BUILDKIT=1 docker build --output releases --progress=plain .
+docker build --output releases --progress=plain .
 #1 [internal] load .dockerignore
 #1 transferring context: 2B done
 #1 DONE 0.0s
