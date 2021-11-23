@@ -26,29 +26,23 @@ func (c *Client) GetApplications(
 	return apps, err
 }
 
+func filterQuery(query []ccv3.Query, queryKey ccv3.QueryKey, value string) []ccv3.Query {
+	return append(query, ccv3.Query{Key: queryKey, Values: []string{value}})
+}
+
 func (c *Client) GetApplicationsByLabels(
 	orgGuid string,
 	spaceGuid string,
 	labels []string,
 ) (apps []resources.Application, err error) {
 	var warns ccv3.Warnings
+	var query []ccv3.Query
 
-	query := []ccv3.Query{
-		{
-			Key:    ccv3.OrganizationGUIDFilter,
-			Values: []string{orgGuid},
-		},
-		{
-			Key:    ccv3.SpaceGUIDFilter,
-			Values: []string{spaceGuid},
-		},
-	}
+	query = filterQuery(query, ccv3.OrganizationGUIDFilter, orgGuid)
+	query = filterQuery(query, ccv3.SpaceGUIDFilter, spaceGuid)
 
 	for _, label := range labels {
-		query = append(query, ccv3.Query{
-			Key:    ccv3.LabelSelectorFilter,
-			Values: []string{label},
-		})
+		query = filterQuery(query, ccv3.LabelSelectorFilter, label)
 	}
 
 	apps, warns, err = c.client.GetApplications(query...)
