@@ -30,6 +30,9 @@ release {
 
       # Hostname can be specifically set, if it is different than the app name
       # hostname = my-example-app-url
+      
+      # To stop old instances of the app after release
+      # stopOldInstances = true
    }
 }
 ```

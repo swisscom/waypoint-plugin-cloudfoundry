@@ -5,3 +5,5 @@ releases
 .waypoint
 /.idea/
 *.secret
+/.vscode/
+.env*

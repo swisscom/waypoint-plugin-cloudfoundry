@@ -1,17 +1,18 @@
 package platform
 
 import (
-	"code.cloudfoundry.org/cli/types"
 	"context"
 	"fmt"
+	"os"
+	"time"
+
+	"code.cloudfoundry.org/cli/types"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-hclog"
 	proto "github.com/hashicorp/waypoint-plugin-sdk/proto/gen"
 	"github.com/swisscom/waypoint-plugin-cloudfoundry/cloudfoundry"
 	"github.com/swisscom/waypoint-plugin-cloudfoundry/utils"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"os"
-	"time"
 
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3"
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv3/constant"
@@ -136,6 +137,7 @@ type DeploymentState struct {
 	apps        []resources.Application
 	cfBuild     *resources.Build
 	route       *resources.Route
+	metadata    *resources.Metadata
 }
 
 // A BuildFunc does not have a strict signature, you can define the parameters
@@ -218,6 +220,11 @@ func (p *Platform) Deploy(
 		return nil, err
 	}
 
+	// Adding label with app name, useful for searching of instances
+	state.metadata = &resources.Metadata{
+		Labels: map[string]types.NullString{"appName": {Value: src.App, IsSet: true}},
+	}
+
 	state.app, err = p.createApp(&state)
 	state.shouldCleanup = true
 	defer p.cleanupResourcesOnFail(&state)
@@ -282,6 +289,7 @@ func (p *Platform) createApp(state *DeploymentState) (*resources.Application, er
 		SpaceGUID:     state.space.GUID,
 		LifecycleType: constant.AppLifecycleTypeDocker,
 		State:         constant.ApplicationStarted,
+		Metadata:      state.metadata,
 	}
 
 	app, _, err := state.client.CfClient().CreateApplication(appCreateRequest)
