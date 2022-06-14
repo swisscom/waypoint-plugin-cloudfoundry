@@ -1,4 +1,4 @@
-FROM golang:1.15.3-alpine3.12 as build
+FROM golang:1.17-alpine as build
 
 # Install the Protocol Buffers compiler and Go plugin
 RUN apk add protobuf git make zip
@@ -21,4 +21,4 @@ RUN make zip
 
 FROM scratch as export_stage
 
-COPY --from=build /go/plugin/bin/*.zip .
+COPY --from=build /go/plugin/bin/*.zip ./
