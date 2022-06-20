@@ -66,8 +66,4 @@ zip:
 # Build the plugin using a Docker container
 build-docker:
 	rm -rf ./releases
-	docker build -t "$(REGISTRY)/$(IMAGE):$(TAG)" .
-
-push-docker:
-	docker push "$(REGISTRY)/$(IMAGE):$(TAG)"
-
+	DOCKER_BUILDKIT=1 docker build --output releases --progress=plain .
