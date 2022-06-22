@@ -1,9 +1,10 @@
 package utils_test
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/swisscom/waypoint-plugin-cloudfoundry/utils"
-	"testing"
 )
 
 func TestParseEnv(t *testing.T) {

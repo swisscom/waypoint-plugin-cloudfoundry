@@ -13,9 +13,9 @@ import (
 func TestDeploy(t *testing.T) {
 	p := Platform{
 		config: Config{
-			Organisation: os.Getenv("CF_ORG"),
-			Space:        os.Getenv("CF_SPACE"),
-			Domain:       os.Getenv("CF_DOMAIN"),
+			Organisation:             os.Getenv("CF_ORG"),
+			Space:                    os.Getenv("CF_SPACE"),
+			Domain:                   os.Getenv("CF_DOMAIN"),
 			DeploymentTimeoutSeconds: "10s",
 		},
 	}

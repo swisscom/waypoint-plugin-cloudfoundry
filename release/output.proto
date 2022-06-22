@@ -8,4 +8,5 @@ option go_package = "github.com/swisscom/waypoint-plugin-cloudfoundry/release";
 message Release {
   string url = 1;
   string route_guid = 2;
+  bool stop_old_instances = 3;
 }

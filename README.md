@@ -18,7 +18,14 @@ deploy {
       # Make sure to create and rename this file, if needed
       # it should contain username:password as base64 encoded string
       docker_encoded_auth = file(abspath("./docker_encoded_credentials.secret"))
-   }
+
+      # Defines an Health Check configuration
+      health_check {
+         type = "http" # required
+         endpoint = "/health" # required if type = "http"
+         timeout = 60
+         invocation_timeout = 60
+      }
 }
 ```
 
@@ -30,6 +37,9 @@ release {
 
       # Hostname can be specifically set, if it is different than the app name
       # hostname = my-example-app-url
+      
+      # To stop old instances of the app after release
+      # stopOldInstances = true
    }
 }
 ```
@@ -60,7 +70,7 @@ The built artifacts will be output in the `./releases` folder.
 make build-docker
 
 rm -rf ./releases
-DOCKER_BUILDKIT=1 docker build --output releases --progress=plain .
+docker build --output releases --progress=plain .
 #1 [internal] load .dockerignore
 #1 transferring context: 2B done
 #1 DONE 0.0s

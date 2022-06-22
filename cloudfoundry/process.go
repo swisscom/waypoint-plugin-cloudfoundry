@@ -18,3 +18,10 @@ func (c *Client) CreateApplicationProcessScale(guid string, p resources.Process)
 	c.listWarnings(warns)
 	return proc, err
 }
+
+func (c *Client) UpdateApplicationProcess(p resources.Process) (proc resources.Process, err error) {
+	var warns ccv3.Warnings
+	proc, warns, err = c.client.UpdateProcess(p)
+	c.listWarnings(warns)
+	return proc, err
+}
