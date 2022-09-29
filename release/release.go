@@ -19,7 +19,7 @@ type Config struct {
 	Domain           string   `hcl:"domain"`
 	Hostname         string   `hcl:"hostname,optional"`
 	AdditionalRoutes []string `hcl:"additional_routes,optional"`
-	StopOldInstances bool     `hcl:"stopOldInstances,optional"`
+	StopOldInstances bool     `hcl:"stop_old_instances,optional"`
 }
 
 type Releaser struct {
