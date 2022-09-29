@@ -1,7 +1,8 @@
 
-## unreleased
+## 0.3.0 (Sep 29, 2022)
 
 FEATURES:
+* Compatibility with waypoint 0.10.x
 
 IMPROVEMENTS:
 
